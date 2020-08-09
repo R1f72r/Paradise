@@ -30,10 +30,10 @@
 			pixel_x = 25
 		if(WEST)
 			pixel_x = -25
-	if(radio_controller)
+	if(SSradio)
 		set_frequency(frequency)
 	spawn(5)
-		src.area = src.loc.loc
+		src.area = get_area(src)
 
 		if(otherarea)
 			src.area = locate(text2path("/area/[otherarea]"))
@@ -44,19 +44,20 @@
 		src.on = src.area.lightswitch
 		updateicon()
 
-/obj/machinery/light_switch/initialize()
+/obj/machinery/light_switch/Initialize()
 	..()
 	set_frequency(frequency)
 
 /obj/machinery/light_switch/proc/set_frequency(new_frequency)
-	radio_controller.remove_object(src, frequency)
+	SSradio.remove_object(src, frequency)
 	frequency = new_frequency
-	radio_connection = radio_controller.add_object(src, frequency, RADIO_LOGIC)
+	radio_connection = SSradio.add_object(src, frequency, RADIO_LOGIC)
 	return
 
 /obj/machinery/light_switch/Destroy()
-	if(radio_controller)
-		radio_controller.remove_object(src,frequency)
+	if(SSradio)
+		SSradio.remove_object(src, frequency)
+	radio_connection = null
 	return ..()
 
 /obj/machinery/light_switch/proc/updateicon()
@@ -69,13 +70,13 @@
 			icon_state = "light0"
 
 /obj/machinery/light_switch/examine(mob/user)
-	if(..(user, 1))
-		to_chat(user, "A light switch. It is [on? "on" : "off"].")
+	. = ..()
+	. += "A light switch. It is [on? "on" : "off"]."
 
 /obj/machinery/light_switch/attack_ghost(mob/user)
 	if(user.can_advanced_admin_interact())
 		return attack_hand(user)
-		
+
 /obj/machinery/light_switch/attack_hand(mob/user)
 	on = !on
 	updateicon()
@@ -143,25 +144,30 @@
 	if(logic_connect && powered(LIGHT))		//We won't send signals while unpowered, but the last signal will remain valid for anything that received it before we went dark
 		handle_output()
 
-/obj/machinery/light_switch/attackby(obj/item/weapon/W as obj, mob/user as mob, params)
-	if(istype(W, /obj/item/device/detective_scanner))
+/obj/machinery/light_switch/attackby(obj/item/W as obj, mob/user as mob, params)
+	if(istype(W, /obj/item/detective_scanner))
 		return
+	return ..()
 
-	if(istype(W, /obj/item/device/multitool))
-		update_multitool_menu(user)
-		return 1
+/obj/machinery/light_switch/multitool_act(mob/user, obj/item/I)
+	. = TRUE
+	if(!I.use_tool(src, user, 0, volume = I.tool_volume))
+		return
+	update_multitool_menu(user)
 
-	if(istype(W, /obj/item/weapon/wrench))
-		playsound(get_turf(src), W.usesound, 50, 1)
-		if(do_after(user, 30 * W.toolspeed, target = src))
-			to_chat(user, "<span class='notice'>You detach \the [src] from the wall.</span>")
-			new/obj/item/mounted/frame/light_switch(get_turf(src))
-			qdel(src)
-		return 1
+/obj/machinery/light_switch/wrench_act(mob/user, obj/item/I)
+	. = TRUE
+	if(!I.tool_use_check(user, 0))
+		return
+	user.visible_message("<span class='notice'>[user] starts unwrenching [src] from the wall...</span>", "<span class='notice'>You are unwrenching [src] from the wall...</span>", "<span class='warning'>You hear ratcheting.</span>")
+	. = TRUE
+	if(!I.use_tool(src, user, 30, volume = I.tool_volume))
+		return
+	WRENCH_UNANCHOR_WALL_MESSAGE
+	new/obj/item/mounted/frame/light_switch(get_turf(src))
+	qdel(src)
 
-	return src.attack_hand(user)
-
-/obj/machinery/light_switch/multitool_menu(var/mob/user, var/obj/item/device/multitool/P)
+/obj/machinery/light_switch/multitool_menu(var/mob/user, var/obj/item/multitool/P)
 	return {"
 	<ul>
 	<li><b>Light Circuit Connection:</b> <a href='?src=[UID()];toggle_light_connect=1'>[light_connect ? "On" : "Off"]</a></li>

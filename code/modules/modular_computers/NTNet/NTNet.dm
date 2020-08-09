@@ -1,4 +1,4 @@
-var/global/datum/ntnet/ntnet_global = new()
+GLOBAL_DATUM_INIT(ntnet_global, /datum/ntnet, new())
 
 
 // This is the NTNet datum. There can be only one NTNet datum in game at once. Modular computers read data from this.
@@ -26,17 +26,17 @@ var/global/datum/ntnet/ntnet_global = new()
 
 // If new NTNet datum is spawned, it replaces the old one.
 /datum/ntnet/New()
-	if(ntnet_global && (ntnet_global != src))
-		ntnet_global = src // There can be only one.
-	for(var/obj/machinery/ntnet_relay/R in machines)
+	if(GLOB.ntnet_global && (GLOB.ntnet_global != src))
+		GLOB.ntnet_global = src // There can be only one.
+	for(var/obj/machinery/ntnet_relay/R in GLOB.machines)
 		relays.Add(R)
 		R.NTNet = src
 	build_software_lists()
 	add_log("NTNet logging system activated.")
 
 // Simplified logging: Adds a log. log_string is mandatory parameter, source is optional.
-/datum/ntnet/proc/add_log(log_string, obj/item/weapon/computer_hardware/network_card/source = null)
-	var/log_text = "[worldtime2text()] - "
+/datum/ntnet/proc/add_log(log_string, obj/item/computer_hardware/network_card/source = null)
+	var/log_text = "[station_time_timestamp()] - "
 	if(source)
 		log_text += "[source.get_network_tag()] - "
 	else

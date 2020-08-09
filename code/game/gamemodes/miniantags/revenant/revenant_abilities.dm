@@ -73,7 +73,7 @@
 				icon_state = "revenant_draining"
 				reveal(27)
 				stun(27)
-				target.visible_message("<span class='warning'>[target] suddenly rises slightly into the air, their skin turning an ashy gray.</span>")
+				target.visible_message("<span class='warning'>[target] suddenly rises slightly into the air, [target.p_their()] skin turning an ashy gray.</span>")
 				target.Beam(src,icon_state="drain_life",icon='icons/effects/effects.dmi',time=26)
 				if(do_after(src, 30, 0, target)) //As one cannot prove the existance of ghosts, ghosts cannot prove the existance of the target they were draining.
 					change_essence_amount(essence_drained, 0, target)
@@ -110,8 +110,6 @@
 	message = "<span class='revennotice'>You toggle your night vision.</span>"
 	action_icon_state = "r_nightvision"
 	action_background_icon_state = "bg_revenant"
-	non_night_vision = INVISIBILITY_REVENANT
-	night_vision = SEE_INVISIBLE_OBSERVER_NOLIGHTING
 
 //Transmit: the revemant's only direct way to communicate. Sends a single message silently to a single mob
 /obj/effect/proc_holder/spell/targeted/revenant_transmit
@@ -132,7 +130,7 @@
 			if(!msg)
 				charge_counter = charge_max
 				return
-			log_say("RevenantTransmit: [key_name(user)]->[key_name(M)] : [msg]")
+			log_say("(REVENANT to [key_name(M)]) [msg]", user)
 			to_chat(user, "<span class='revennotice'><b>You transmit to [M]:</b> [msg]</span>")
 			to_chat(M, "<span class='revennotice'><b>An alien voice resonates from all around...</b></span><i> [msg]</I>")
 
@@ -209,22 +207,18 @@
 						if(!L.on)
 							return
 						L.visible_message("<span class='warning'><b>\The [L] suddenly flares brightly and begins to spark!</span>")
-						var/datum/effect_system/spark_spread/s = new /datum/effect_system/spark_spread/
-						s.set_up(4, 0, L)
-						s.start()
+						do_sparks(4, 0, L)
 						new/obj/effect/temp_visual/revenant(L.loc)
 						sleep(20)
 						if(!L.on) //wait, wait, don't shock me
 							return
 						flick("[L.base_state]2", L)
-						for(var/mob/living/carbon/human/M in view(shock_range, L))
+						for(var/mob/living/M in view(shock_range, L))
 							if(M == user)
 								return
 							M.Beam(L,icon_state="purple_lightning",icon='icons/effects/effects.dmi',time=5)
-							M.electrocute_act(shock_damage, "[L.name]", safety=1)
-							var/datum/effect_system/spark_spread/z = new /datum/effect_system/spark_spread/
-							z.set_up(4, 0, M)
-							z.start()
+							M.electrocute_act(shock_damage, L, safety = TRUE)
+							do_sparks(4, 0, M)
 							playsound(M, 'sound/machines/defib_zap.ogg', 50, 1, -1)
 
 //Defile: Corrupts nearby stuff, unblesses floor tiles.
@@ -263,16 +257,16 @@
 					new/obj/effect/temp_visual/revenant(T)
 					T.ChangeTurf(/turf/simulated/wall/r_wall/rust)
 				for(var/obj/structure/window/window in T.contents)
-					window.hit(rand(30,80))
-					if(window && window.is_fulltile())
+					window.take_damage(rand(30,80))
+					if(window && window.fulltile)
 						new/obj/effect/temp_visual/revenant/cracks(window.loc)
 				for(var/obj/structure/closet/closet in T.contents)
 					closet.open()
 
 				if(!istype(T, /turf/simulated/floor/plating) && !istype(T, /turf/simulated/floor/engine/cult) && istype(T, /turf/simulated/floor) && prob(15))
 					var/turf/simulated/floor/floor = T
-					if(floor.intact)
-						floor.builtin_tile.loc = floor
+					if(floor.intact && floor.floor_tile)
+						new floor.floor_tile(floor)
 					floor.broken = 0
 					floor.burnt = 0
 					floor.make_plating(1)

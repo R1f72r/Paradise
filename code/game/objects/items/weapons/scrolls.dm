@@ -1,4 +1,4 @@
-/obj/item/weapon/teleportation_scroll
+/obj/item/teleportation_scroll
 	name = "scroll of teleportation"
 	desc = "A scroll for moving around."
 	icon = 'icons/obj/wizard.dmi'
@@ -9,14 +9,14 @@
 	throw_speed = 4
 	throw_range = 20
 	origin_tech = "bluespace=6"
-	burn_state = FLAMMABLE
+	resistance_flags = FLAMMABLE
 
-/obj/item/weapon/teleportation_scroll/apprentice
+/obj/item/teleportation_scroll/apprentice
 	name = "lesser scroll of teleportation"
 	uses = 1
 	origin_tech = "bluespace=5"
 
-/obj/item/weapon/teleportation_scroll/attack_self(mob/user as mob)
+/obj/item/teleportation_scroll/attack_self(mob/user as mob)
 	user.set_machine(src)
 	var/dat = "<B>Teleportation Scroll:</B><BR>"
 	dat += "Number of uses: [src.uses]<BR>"
@@ -28,7 +28,7 @@
 	onclose(user, "scroll")
 	return
 
-/obj/item/weapon/teleportation_scroll/Topic(href, href_list)
+/obj/item/teleportation_scroll/Topic(href, href_list)
 	..()
 	if(usr.stat || usr.restrained() || src.loc != usr)
 		return
@@ -43,12 +43,16 @@
 	attack_self(H)
 	return
 
-/obj/item/weapon/teleportation_scroll/proc/teleportscroll(var/mob/user)
+/obj/item/teleportation_scroll/proc/teleportscroll(var/mob/user)
 
 	var/A
 
-	A = input(user, "Area to jump to", "BOOYEA", A) in teleportlocs
-	var/area/thearea = teleportlocs[A]
+	A = input(user, "Area to jump to", "BOOYEA", A) as null|anything in GLOB.teleportlocs
+
+	if(!A)
+		return
+
+	var/area/thearea = GLOB.teleportlocs[A]
 
 	if(user.stat || user.restrained())
 		return
@@ -56,7 +60,7 @@
 		return
 
 	if(thearea.tele_proof && !istype(thearea, /area/wizard_station))
-		to_chat(user, "A mysterious force disrupts your arcane spell matrix, and you remain where you are.")
+		to_chat(user, "<span class='warning'>A mysterious force disrupts your arcane spell matrix, and you remain where you are.</span>")
 		return
 
 	var/datum/effect_system/smoke_spread/smoke = new
@@ -75,11 +79,14 @@
 				L+=T
 
 	if(!L.len)
-		to_chat(user, "The spell matrix was unable to locate a suitable teleport destination for an unknown reason. Sorry.")
+		to_chat(user, "<span class='warning'>The spell matrix was unable to locate a suitable teleport destination for an unknown reason. Sorry.</span>")
 		return
 
 	if(user && user.buckled)
-		user.buckled.unbuckle_mob()
+		user.buckled.unbuckle_mob(user, force = TRUE)
+
+	if(user && user.has_buckled_mobs())
+		user.unbuckle_all_mobs(force = TRUE)
 
 	var/list/tempL = L
 	var/attempt = null
@@ -93,7 +100,8 @@
 			break
 
 	if(!success)
-		user.loc = pick(L)
+		user.forceMove(pick(L))
 
 	smoke.start()
 	src.uses -= 1
+	user.update_action_buttons_icon()  //Update action buttons as some spells might now be castable

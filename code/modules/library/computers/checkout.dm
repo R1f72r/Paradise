@@ -47,14 +47,14 @@
 			dat += "</ol>"
 
 			if(src.arcanecheckout)
-				new /obj/item/weapon/tome(src.loc)
+				new /obj/item/tome(src.loc)
 				to_chat(user, "<span class='warning'>Your sanity barely endures the seconds spent in the vault's browsing window. The only thing to remind you of this when you stop browsing is a dusty old tome sitting on the desk. You don't really remember printing it.</span>")
-				user.visible_message("[user] stares at the blank screen for a few moments, his expression frozen in fear. When he finally awakens from it, he looks a lot older.", 2)
+				user.visible_message("[user] stares at the blank screen for a few moments, [user.p_their()] expression frozen in fear. When [user.p_they()] finally awaken[user.p_s()] from it, [user.p_they()] look[user.p_s()] a lot older.", 2)
 				src.arcanecheckout = 0
 		if(1)
 			// Inventory
 			dat += "<h3>Inventory</h3>"
-			for(var/obj/item/weapon/book/b in inventory)
+			for(var/obj/item/book/b in inventory)
 				dat += "[b.name] <A href='?src=[UID()];delbook=\ref[b]'>(Delete)</A><BR>"
 			dat += "<A href='?src=[UID()];switchscreen=0'>(Return to main menu)</A><BR>"
 		if(2)
@@ -91,11 +91,11 @@
 				<A href='?src=[UID()];switchscreen=0'>(Return to main menu)</A><BR>"}
 		if(4)
 			dat += "<h3>External Archive</h3>"
-			if(!dbcon.IsConnected())
+			if(!GLOB.dbcon.IsConnected())
 				dat += "<font color=red><b>ERROR</b>: Unable to contact External Archive. Please contact your system administrator for assistance.</font>"
 			else
 				num_results = src.get_num_results()
-				num_pages = Ceiling(num_results/LIBRARY_BOOKS_PER_PAGE)
+				num_pages = CEILING(num_results/LIBRARY_BOOKS_PER_PAGE, 1)
 				dat += {"<ul>
 					<li><A href='?src=[UID()];id=-1'>(Order book by SS<sup>13</sup>BN)</A></li>
 				</ul>"}
@@ -165,20 +165,21 @@
 			dat += "<table>"
 
 			var/list/forbidden = list(
-				/obj/item/weapon/book/manual
+				/obj/item/book/manual/random
 			)
 
 			if(!emagged)
-				forbidden |= /obj/item/weapon/book/manual/nuclear
+				forbidden |= /obj/item/book/manual/nuclear
 
 			var/manualcount = 1
-			var/obj/item/weapon/book/manual/M = null
+			var/obj/item/book/manual/M = null
 
-			for(var/manual_type in (typesof(/obj/item/weapon/book/manual) - forbidden))
-				M = new manual_type()
-				dat += "<tr><td><A href='?src=[UID()];manual=[manualcount]'>[M.title]</A></td></tr>"
+			for(var/manual_type in subtypesof(/obj/item/book/manual))
+				if(!(manual_type in forbidden))
+					M = new manual_type()
+					dat += "<tr><td><A href='?src=[UID()];manual=[manualcount]'>[M.title]</A></td></tr>"
+					QDEL_NULL(M)
 				manualcount++
-				QDEL_NULL(M)
 			dat += "</table>"
 			dat += "<BR><A href='?src=[UID()];switchscreen=0'>(Return to main menu)</A><BR>"
 
@@ -198,12 +199,15 @@
 		emagged = 1
 		to_chat(user, "<span class='notice'>You override the library computer's printing restrictions.</span>")
 
-/obj/machinery/computer/library/checkout/attackby(obj/item/weapon/W as obj, mob/user as mob)
-	if(istype(W, /obj/item/weapon/barcodescanner))
-		var/obj/item/weapon/barcodescanner/scanner = W
+/obj/machinery/computer/library/checkout/attackby(obj/item/W as obj, mob/user as mob)
+	if(default_unfasten_wrench(user, W))
+		power_change()
+		return
+	if(istype(W, /obj/item/barcodescanner))
+		var/obj/item/barcodescanner/scanner = W
 		scanner.computer = src
 		to_chat(user, "[scanner]'s associated machine has been set to [src].")
-		audible_message("[src] lets out a low, short blip.", 2)
+		audible_message("[src] lets out a low, short blip.", hearing_distance = 2)
 		return 1
 	else
 		return ..()
@@ -220,13 +224,13 @@
 		else
 			var/pn = text2num(href_list["pagenum"])
 			if(!isnull(pn))
-				page_num = Clamp(pn, 1, num_pages)
+				page_num = clamp(pn, 1, num_pages)
 
 	if(href_list["page"])
 		if(num_pages == 0)
 			page_num = 1
 		else
-			page_num = Clamp(text2num(href_list["page"]), 1, num_pages)
+			page_num = clamp(text2num(href_list["page"]), 1, num_pages)
 	if(href_list["settitle"])
 		var/newtitle = input("Enter a title to search for:") as text|null
 		if(newtitle)
@@ -234,7 +238,7 @@
 		else
 			query.title = null
 	if(href_list["setcategory"])
-		var/newcategory = input("Choose a category to search for:") in (list("Any") + library_section_names)
+		var/newcategory = input("Choose a category to search for:") in (list("Any") + GLOB.library_section_names)
 		if(newcategory == "Any")
 			query.category = null
 		else if(newcategory)
@@ -248,7 +252,7 @@
 
 	if(href_list["search"])
 		num_results = src.get_num_results()
-		num_pages = Ceiling(num_results/LIBRARY_BOOKS_PER_PAGE)
+		num_pages = CEILING(num_results/LIBRARY_BOOKS_PER_PAGE, 1)
 		page_num = 1
 
 		screenstate = 4
@@ -258,12 +262,12 @@
 		var/datum/cachedbook/target = getBookByID(href_list["del"]) // Sanitized in getBookByID
 		var/ans = alert(usr, "Are you sure you wish to delete \"[target.title]\", by [target.author]? This cannot be undone.", "Library System", "Yes", "No")
 		if(ans=="Yes")
-			var/DBQuery/query = dbcon.NewQuery("DELETE FROM [format_table_name("library")] WHERE id=[target.id]")
+			var/DBQuery/query = GLOB.dbcon.NewQuery("DELETE FROM [format_table_name("library")] WHERE id=[target.id]")
 			var/response = query.Execute()
 			if(!response)
 				to_chat(usr, query.ErrorMsg())
 				return
-			log_admin("LIBRARY: [usr.name]/[usr.key] has deleted \"[target.title]\", by [target.author] ([target.ckey])!")
+			log_admin("LIBRARY: [key_name(usr)] has deleted \"[target.title]\", by [target.author] ([target.ckey])!")
 			message_admins("[key_name_admin(usr)] has deleted \"[target.title]\", by [target.author] ([target.ckey])!")
 			src.updateUsrDialog()
 			return
@@ -274,7 +278,7 @@
 		var/tckey = ckey(href_list["delbyckey"])
 		var/ans = alert(usr,"Are you sure you wish to delete all books by [tckey]? This cannot be undone.", "Library System", "Yes", "No")
 		if(ans=="Yes")
-			var/DBQuery/query = dbcon.NewQuery("DELETE FROM [format_table_name("library")] WHERE ckey='[sanitizeSQL(tckey)]'")
+			var/DBQuery/query = GLOB.dbcon.NewQuery("DELETE FROM [format_table_name("library")] WHERE ckey='[sanitizeSQL(tckey)]'")
 			var/response = query.Execute()
 			if(!response)
 				to_chat(usr, query.ErrorMsg())
@@ -283,13 +287,13 @@
 			if(affected==0)
 				to_chat(usr, "<span class='danger'>Unable to find any matching rows.</span>")
 				return
-			log_admin("LIBRARY: [usr.name]/[usr.key] has deleted [affected] books written by [tckey]!")
+			log_admin("LIBRARY: [key_name(usr)] has deleted [affected] books written by [tckey]!")
 			message_admins("[key_name_admin(usr)] has deleted [affected] books written by [tckey]!")
 			src.updateUsrDialog()
 			return
 
 	if(href_list["flag"])
-		if(!dbcon.IsConnected())
+		if(!GLOB.dbcon.IsConnected())
 			alert("Connection to Archive has been severed. Aborting.")
 			return
 		var/id = href_list["flag"]
@@ -297,7 +301,7 @@
 			var/datum/cachedbook/B = getBookByID(id)
 			if(B)
 				if((input(usr, "Are you sure you want to flag [B.title] as having inappropriate content?", "Flag Book #[B.id]") in list("Yes", "No")) == "Yes")
-					library_catalog.flag_book_by_id(usr, id)
+					GLOB.library_catalog.flag_book_by_id(usr, id)
 
 	if(href_list["switchscreen"])
 		switch(href_list["switchscreen"])
@@ -316,12 +320,12 @@
 			if("6")
 				if(!bibledelay)
 
-					var/obj/item/weapon/storage/bible/B = new /obj/item/weapon/storage/bible(src.loc)
-					if(ticker && ( ticker.Bible_icon_state && ticker.Bible_item_state) )
-						B.icon_state = ticker.Bible_icon_state
-						B.item_state = ticker.Bible_item_state
-						B.name = ticker.Bible_name
-						B.deity_name = ticker.Bible_deity_name
+					var/obj/item/storage/bible/B = new /obj/item/storage/bible(src.loc)
+					if(SSticker && ( SSticker.Bible_icon_state && SSticker.Bible_item_state) )
+						B.icon_state = SSticker.Bible_icon_state
+						B.item_state = SSticker.Bible_item_state
+						B.name = SSticker.Bible_name
+						B.deity_name = SSticker.Bible_deity_name
 
 					bibledelay = 1
 					spawn(60)
@@ -359,7 +363,7 @@
 		var/datum/borrowbook/b = locate(href_list["checkin"])
 		checkouts.Remove(b)
 	if(href_list["delbook"])
-		var/obj/item/weapon/book/b = locate(href_list["delbook"])
+		var/obj/item/book/b = locate(href_list["delbook"])
 		inventory.Remove(b)
 	if(href_list["uploadauthor"])
 		var/newauthor = copytext(sanitize(input("Enter the author's name: ") as text|null),1,MAX_MESSAGE_LEN)
@@ -375,14 +379,14 @@
 				var/choice = input("Are you certain you wish to upload this title to the Archive?") in list("Confirm", "Abort")
 				if(choice == "Confirm")
 					establish_db_connection()
-					if(!dbcon.IsConnected())
+					if(!GLOB.dbcon.IsConnected())
 						alert("Connection to Archive has been severed. Aborting.")
 					else
 						var/sqltitle = sanitizeSQL(scanner.cache.name)
 						var/sqlauthor = sanitizeSQL(scanner.cache.author)
 						var/sqlcontent = sanitizeSQL(scanner.cache.dat)
 						var/sqlcategory = sanitizeSQL(upload_category)
-						var/DBQuery/query = dbcon.NewQuery("INSERT INTO [format_table_name("library")] (author, title, content, category, ckey, flagged) VALUES ('[sqlauthor]', '[sqltitle]', '[sqlcontent]', '[sqlcategory]', '[ckey(usr.key)]', 0)")
+						var/DBQuery/query = GLOB.dbcon.NewQuery("INSERT INTO [format_table_name("library")] (author, title, content, category, ckey, flagged) VALUES ('[sqlauthor]', '[sqltitle]', '[sqlcontent]', '[sqlcategory]', '[ckey(usr.key)]', 0)")
 						var/response = query.Execute()
 						if(!response)
 							to_chat(usr, query.ErrorMsg())
@@ -396,7 +400,7 @@
 			if(!href_list["id"])
 				return
 
-		if(!dbcon.IsConnected())
+		if(!GLOB.dbcon.IsConnected())
 			alert("Connection to Archive has been severed. Aborting.")
 			return
 
@@ -409,7 +413,7 @@
 			return
 
 		if(bibledelay)
-			audible_message("<b>[src]</b>'s monitor flashes, \"Printer unavailable. Please allow a short time before attempting to print.\"")
+			visible_message("<b>[src]</b>'s monitor flashes, \"Printer unavailable. Please allow a short time before attempting to print.\"")
 		else
 			bibledelay = 1
 			spawn(60)
@@ -419,7 +423,7 @@
 		if(!href_list["manual"]) return
 		var/bookid = href_list["manual"]
 
-		if(!dbcon.IsConnected())
+		if(!GLOB.dbcon.IsConnected())
 			alert("Connection to Archive has been severed. Aborting.")
 			return
 
@@ -451,7 +455,7 @@
 /obj/machinery/computer/library/checkout/proc/make_external_book(var/datum/cachedbook/newbook)
 	if(!newbook || !newbook.id)
 		return
-	var/obj/item/weapon/book/B = new newbook.path(loc)
+	var/obj/item/book/B = new newbook.path(loc)
 
 	if(!newbook.programmatic)
 		B.name = "Book: [newbook.title]"
@@ -459,4 +463,5 @@
 		B.author = newbook.author
 		B.dat = newbook.content
 		B.icon_state = "book[rand(1,16)]"
+		B.has_drm = TRUE
 	visible_message("[src]'s printer hums as it produces a completely bound book. How did it do that?")

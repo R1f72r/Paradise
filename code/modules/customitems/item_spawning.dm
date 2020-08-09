@@ -3,7 +3,7 @@
 		return
 
 	// Grab the info we want.
-	var/DBQuery/query = dbcon.NewQuery("SELECT cuiPath, cuiPropAdjust, cuiJobMask, cuiDescription, cuiItemName FROM [format_table_name("customuseritems")] WHERE cuiCKey='[M.ckey]' AND (cuiRealName='[sanitizeSQL(M.real_name)]' OR cuiRealName='*')")
+	var/DBQuery/query = GLOB.dbcon.NewQuery("SELECT cuiPath, cuiPropAdjust, cuiJobMask, cuiDescription, cuiItemName FROM [format_table_name("customuseritems")] WHERE cuiCKey='[M.ckey]' AND (cuiRealName='[sanitizeSQL(M.real_name)]' OR cuiRealName='*')")
 	query.Execute()
 
 	while(query.NextRow())
@@ -11,6 +11,9 @@
 		var/propadjust = query.item[2]
 		var/jobmask = query.item[3]
 		var/ok = 0
+		if(!path || !ispath(path))
+			log_debug("Incorrect database entry found in table 'customuseritems' path value = [path], cuiPath is null. cuiCKey='[M.ckey]' AND (cuiRealName='[sanitizeSQL(M.real_name)]' OR cuiRealName='*'")
+			continue
 		if(jobmask != "*")
 			var/list/allowed_jobs = splittext(jobmask,",")
 			for(var/i = 1, i <= allowed_jobs.len, i++)
@@ -26,9 +29,9 @@
 		var/obj/item/Item = new path()
 		var/description = query.item[4]
 		var/newname = query.item[5]
-		if(istype(Item,/obj/item/weapon/card/id))
-			var/obj/item/weapon/card/id/I = Item
-			for(var/obj/item/weapon/card/id/C in M)
+		if(istype(Item,/obj/item/card/id))
+			var/obj/item/card/id/I = Item
+			for(var/obj/item/card/id/C in M)
 				//default settings
 				I.name = "[M.real_name]'s ID Card ([M.mind.role_alt_title ? M.mind.role_alt_title : M.mind.assigned_role])"
 				I.registered_name = M.real_name
@@ -40,14 +43,14 @@
 				qdel(C)
 				ok = M.equip_or_collect(I, slot_wear_id, 0)	//if 1, last argument deletes on fail
 				break
-		else if(istype(M.back, /obj/item/weapon/storage)) // Try to place it in something on the mob's back
-			var/obj/item/weapon/storage/S = M.back
+		else if(istype(M.back, /obj/item/storage)) // Try to place it in something on the mob's back
+			var/obj/item/storage/S = M.back
 			if(S.contents.len < S.storage_slots)
 				Item.loc = M.back
 				ok = 1
 				to_chat(M, "<span class='notice'>Your [Item.name] has been added to your [M.back.name].</span>")
 		if(ok == 0)
-			for(var/obj/item/weapon/storage/S in M.contents) // Try to place it in any item that can store stuff, on the mob.
+			for(var/obj/item/storage/S in M.contents) // Try to place it in any item that can store stuff, on the mob.
 				if(S.contents.len < S.storage_slots)
 					Item.loc = S
 					ok = 1

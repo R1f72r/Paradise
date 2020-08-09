@@ -41,7 +41,7 @@
 	..()
 
 /datum/computer_file/program/chatclient/ui_interact(mob/user, ui_key = "main", var/datum/nanoui/ui = null, var/force_open = 1)
-	ui = nanomanager.try_update_ui(user, src, ui_key, ui, force_open)
+	ui = SSnanoui.try_update_ui(user, src, ui_key, ui, force_open)
 	if(!ui)
 		var/datum/asset/assets = get_asset_datum(/datum/asset/simple/headers)
 		assets.send(user)
@@ -52,7 +52,7 @@
 
 
 /datum/computer_file/program/chatclient/ui_data(mob/user)
-	if(!ntnet_global || !ntnet_global.chat_channels)
+	if(!GLOB.ntnet_global || !GLOB.ntnet_global.chat_channels)
 		return
 
 	var/list/data = get_header_data()
@@ -78,7 +78,7 @@
 
 	else // Channel selection screen
 		var/list/all_channels[0]
-		for(var/C in ntnet_global.chat_channels)
+		for(var/C in GLOB.ntnet_global.chat_channels)
 			var/datum/ntnet_conversation/conv = C
 			if(conv && conv.title)
 				all_channels.Add(list(list(
@@ -103,12 +103,12 @@
 			if(!message || !channel)
 				return
 			channel.add_message(message, username)
-			log_chat("[user]/([user.ckey]) as [username] sent to [channel.title]: [message]")
+			log_chat("[username] sent to [channel.title]: [message]", user)
 
 		if("PRG_joinchannel")
 			. = 1
 			var/datum/ntnet_conversation/C
-			for(var/datum/ntnet_conversation/chan in ntnet_global.chat_channels)
+			for(var/datum/ntnet_conversation/chan in GLOB.ntnet_global.chat_channels)
 				if(chan.id == text2num(href_list["id"]))
 					C = chan
 					break
@@ -154,7 +154,7 @@
 					channel = null
 				return 1
 			var/mob/living/user = usr
-			if(can_run(user, 1, access_network))
+			if(can_run(user, 1, ACCESS_NETWORK))
 				if(channel)
 					var/response = alert(user, "Really engage admin-mode? You will be disconnected from your current channel!", "NTNRC Admin mode", "Yes", "No")
 					if(response == "Yes")
@@ -190,12 +190,11 @@
 				logfile.stored_data += "[logstring]\[BR\]"
 			logfile.stored_data += "\[b\]Logfile dump completed.\[/b\]"
 			logfile.calculate_size()
-			var/obj/item/weapon/computer_hardware/hard_drive/hard_drive = computer.all_components[MC_HDD]
+			var/obj/item/computer_hardware/hard_drive/hard_drive = computer.all_components[MC_HDD]
 			if(!computer || !hard_drive || !hard_drive.store_file(logfile))
 				if(!computer)
 					// This program shouldn't even be runnable without computer.
 					CRASH("Var computer is null!")
-					return 1
 				if(!hard_drive)
 					computer.visible_message("\The [computer] shows an \"I/O Error - Hard drive connection error\" warning.")
 				else	// In 99.9% cases this will mean our HDD is full

@@ -1,4 +1,4 @@
-var/global/static/ntnrc_uid = 0
+GLOBAL_VAR_INIT(ntnrc_uid, 0)
 
 /datum/ntnet_conversation
 	var/id = null
@@ -9,24 +9,24 @@ var/global/static/ntnrc_uid = 0
 	var/password
 
 /datum/ntnet_conversation/New()
-	id = ntnrc_uid
-	ntnrc_uid++
-	if(ntnet_global)
-		ntnet_global.chat_channels.Add(src)
+	id = GLOB.ntnrc_uid
+	GLOB.ntnrc_uid++
+	if(GLOB.ntnet_global)
+		GLOB.ntnet_global.chat_channels.Add(src)
 	..()
 
 /datum/ntnet_conversation/Destroy()
-	if(ntnet_global)
-		ntnet_global.chat_channels.Remove(src)
+	if(GLOB.ntnet_global)
+		GLOB.ntnet_global.chat_channels.Remove(src)
 	return ..()
 
 /datum/ntnet_conversation/proc/add_message(message, username)
-	message = "[worldtime2text()] [username]: [message]"
+	message = "[station_time_timestamp()] [username]: [message]"
 	messages.Add(message)
 	trim_message_list()
 
 /datum/ntnet_conversation/proc/add_status_message(message)
-	messages.Add("[worldtime2text()] -!- [message]")
+	messages.Add("[station_time_timestamp()] -!- [message]")
 	trim_message_list()
 
 /datum/ntnet_conversation/proc/trim_message_list()

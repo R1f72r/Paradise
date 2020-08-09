@@ -1,6 +1,3 @@
-var/global/list/pipe_networks = list()
-var/global/list/deferred_pipenet_rebuilds = list()
-
 /datum/pipeline
 	var/datum/gas_mixture/air
 	var/list/datum/gas_mixture/other_airs = list()
@@ -13,10 +10,10 @@ var/global/list/deferred_pipenet_rebuilds = list()
 	var/alert_pressure = 0
 
 /datum/pipeline/New()
-	pipe_networks += src
+	SSair.networks += src
 
 /datum/pipeline/Destroy()
-	pipe_networks -= src
+	SSair.networks -= src
 	if(air && air.volume)
 		temporarily_store_air()
 	for(var/obj/machinery/atmospherics/pipe/P in members)
@@ -25,13 +22,13 @@ var/global/list/deferred_pipenet_rebuilds = list()
 		A.nullifyPipenet(src)
 	return ..()
 
-/datum/pipeline/proc/process()//This use to be called called from the pipe networks
+/datum/pipeline/process()//This use to be called called from the pipe networks
 	if(update)
 		update = 0
 		reconcile_air()
 	return
 
-var/pipenetwarnings = 10
+GLOBAL_VAR_INIT(pipenetwarnings, 10)
 
 /datum/pipeline/proc/build_pipeline(obj/machinery/atmospherics/base)
 	var/volume = 0
@@ -60,11 +57,7 @@ var/pipenetwarnings = 10
 						if(!members.Find(item))
 
 							if(item.parent)
-								if(pipenetwarnings > 0)
-									error("[item.type] added to a pipenet while still having one (pipes leading to the same spot stacking in one turf). Nearby: [item.x], [item.y], [item.z].")
-									pipenetwarnings -= 1
-									if(pipenetwarnings == 0)
-										error("Further messages about pipenets will be suppressed.")
+								log_runtime(EXCEPTION("[item.type] \[\ref[item]] added to a pipenet while still having one ([item.parent]) (pipes leading to the same spot stacking in one turf). Nearby: [item.x], [item.y], [item.z]."))
 							members += item
 							possible_expansions += item
 
@@ -121,14 +114,11 @@ var/pipenetwarnings = 10
 	qdel(E)
 
 /obj/machinery/atmospherics/proc/addMember(obj/machinery/atmospherics/A)
-	return
+	var/datum/pipeline/P = returnPipenet(A)
+	P.addMember(A, src)
 
 /obj/machinery/atmospherics/pipe/addMember(obj/machinery/atmospherics/A)
 	parent.addMember(A, src)
-
-/obj/machinery/atmospherics/addMember(obj/machinery/atmospherics/A)
-	var/datum/pipeline/P = returnPipenet(A)
-	P.addMember(A, src)
 
 /datum/pipeline/proc/temporarily_store_air()
 	//Update individual gas_mixtures by volume ratio
@@ -137,19 +127,14 @@ var/pipenetwarnings = 10
 		member.air_temporary = new
 		member.air_temporary.volume = member.volume
 
-		member.air_temporary.oxygen = air.oxygen*member.volume/air.volume
-		member.air_temporary.nitrogen = air.nitrogen*member.volume/air.volume
-		member.air_temporary.toxins = air.toxins*member.volume/air.volume
-		member.air_temporary.carbon_dioxide = air.carbon_dioxide*member.volume/air.volume
+		member.air_temporary.oxygen = air.oxygen * member.volume / air.volume
+		member.air_temporary.nitrogen = air.nitrogen * member.volume / air.volume
+		member.air_temporary.toxins = air.toxins * member.volume / air.volume
+		member.air_temporary.carbon_dioxide = air.carbon_dioxide * member.volume / air.volume
+		member.air_temporary.sleeping_agent = air.sleeping_agent * member.volume / air.volume
+		member.air_temporary.agent_b = air.agent_b * member.volume / air.volume
 
 		member.air_temporary.temperature = air.temperature
-
-		if(air.trace_gases.len)
-			for(var/datum/gas/trace_gas in air.trace_gases)
-				var/datum/gas/corresponding = new trace_gas.type()
-				member.air_temporary.trace_gases += corresponding
-
-				corresponding.moles = trace_gas.moles*member.volume/air.volume
 
 /datum/pipeline/proc/temperature_interact(turf/target, share_volume, thermal_conductivity)
 	var/total_heat_capacity = air.heat_capacity()
@@ -238,7 +223,8 @@ var/pipenetwarnings = 10
 	var/total_nitrogen = 0
 	var/total_toxins = 0
 	var/total_carbon_dioxide = 0
-	var/list/total_trace_gases = list()
+	var/total_sleeping_agent = 0
+	var/total_agent_b = 0
 
 	for(var/datum/gas_mixture/G in GL)
 		total_volume += G.volume
@@ -249,15 +235,8 @@ var/pipenetwarnings = 10
 		total_nitrogen += G.nitrogen
 		total_toxins += G.toxins
 		total_carbon_dioxide += G.carbon_dioxide
-
-		if(G.trace_gases.len)
-			for(var/datum/gas/trace_gas in G.trace_gases)
-				var/datum/gas/corresponding = locate(trace_gas.type) in total_trace_gases
-				if(!corresponding)
-					corresponding = new trace_gas.type()
-					total_trace_gases += corresponding
-
-				corresponding.moles += trace_gas.moles
+		total_sleeping_agent += G.sleeping_agent
+		total_agent_b += G.agent_b
 
 	if(total_volume > 0)
 
@@ -269,18 +248,11 @@ var/pipenetwarnings = 10
 
 		//Update individual gas_mixtures by volume ratio
 		for(var/datum/gas_mixture/G in GL)
-			G.oxygen = total_oxygen*G.volume/total_volume
-			G.nitrogen = total_nitrogen*G.volume/total_volume
-			G.toxins = total_toxins*G.volume/total_volume
-			G.carbon_dioxide = total_carbon_dioxide*G.volume/total_volume
+			G.oxygen = total_oxygen * G.volume / total_volume
+			G.nitrogen = total_nitrogen * G.volume / total_volume
+			G.toxins = total_toxins * G.volume / total_volume
+			G.carbon_dioxide = total_carbon_dioxide * G.volume / total_volume
+			G.sleeping_agent = total_sleeping_agent * G.volume / total_volume
+			G.agent_b = total_agent_b * G.volume / total_volume
 
 			G.temperature = temperature
-
-			if(total_trace_gases.len)
-				for(var/datum/gas/trace_gas in total_trace_gases)
-					var/datum/gas/corresponding = locate(trace_gas.type) in G.trace_gases
-					if(!corresponding)
-						corresponding = new trace_gas.type()
-						G.trace_gases += corresponding
-
-					corresponding.moles = trace_gas.moles*G.volume/total_volume

@@ -9,8 +9,8 @@
 		if(C.l_hand || C.r_hand)
 			to_chat(C, "<span class='warning'>You may not hold items while blood crawling!</span>")
 			return 0
-		var/obj/item/weapon/bloodcrawl/B1 = new(C)
-		var/obj/item/weapon/bloodcrawl/B2 = new(C)
+		var/obj/item/bloodcrawl/B1 = new(C)
+		var/obj/item/bloodcrawl/B2 = new(C)
 		B1.icon_state = "bloodhand_left"
 		B2.icon_state = "bloodhand_right"
 		C.put_in_hands(B1)
@@ -35,10 +35,8 @@
 		animation.dir = dir
 
 		ExtinguishMob()
-		if(buckled)
-			buckled.unbuckle_mob()
-		if(pulling && bloodcrawl == BLOODCRAWL_EAT)
-			if(istype(pulling, /mob/living/))
+		if(pulling && HAS_TRAIT(src, TRAIT_BLOODCRAWL_EAT))
+			if(isliving(pulling))
 				var/mob/living/victim = pulling
 				if(victim.stat == CONSCIOUS)
 					visible_message("<span class='warning'>[victim] kicks free of [B] just before entering it!</span>")
@@ -50,8 +48,9 @@
 					kidnapped = victim
 					stop_pulling()
 		flick("jaunt",animation)
-		loc = holder
-		holder = holder
+
+		src.holder = holder
+		forceMove(holder)
 
 		if(kidnapped)
 			to_chat(src, "<B>You begin to feast on [kidnapped]. You can not move while you are doing this.</B>")
@@ -64,7 +63,7 @@
 				var/mob/living/simple_animal/slaughter/SD = src
 				sound = SD.feast_sound
 			else
-				sound = 'sound/misc/Demon_consume.ogg'
+				sound = 'sound/misc/demon_consume.ogg'
 
 			for(var/i in 1 to 3)
 				playsound(get_turf(src), sound, 100, 1)
@@ -77,13 +76,17 @@
 				adjustToxLoss(-1000)
 
 				if(istype(src, /mob/living/simple_animal/slaughter)) //rason, do not want humans to get this
-
 					var/mob/living/simple_animal/slaughter/demon = src
 					demon.devoured++
 					to_chat(kidnapped, "<span class='userdanger'>You feel teeth sink into your flesh, and the--</span>")
 					kidnapped.adjustBruteLoss(1000)
 					kidnapped.forceMove(src)
 					demon.consumed_mobs.Add(kidnapped)
+					if(ishuman(kidnapped))
+						var/mob/living/carbon/human/H = kidnapped
+						if(H.w_uniform && istype(H.w_uniform, /obj/item/clothing/under))
+							var/obj/item/clothing/under/U = H.w_uniform
+							U.sensor_mode = SENSOR_OFF
 				else
 					kidnapped.ghostize()
 					qdel(kidnapped)
@@ -96,7 +99,7 @@
 		notransform = 0
 	return 1
 
-/obj/item/weapon/bloodcrawl
+/obj/item/bloodcrawl
 	name = "blood crawl"
 	desc = "You are unable to hold anything while in this form."
 	icon = 'icons/effects/blood.dmi'
@@ -136,7 +139,7 @@
 
 	if(iscarbon(src))
 		var/mob/living/carbon/C = src
-		for(var/obj/item/weapon/bloodcrawl/BC in C)
+		for(var/obj/item/bloodcrawl/BC in C)
 			C.flags = null
 			C.unEquip(BC)
 			qdel(BC)
@@ -154,11 +157,10 @@
 	name = "odd blood"
 	icon = 'icons/effects/effects.dmi'
 	icon_state = "nothing"
-	var/canmove = 1
 	density = 0
 	anchored = 1
 	invisibility = 60
-	burn_state = LAVA_PROOF
+	resistance_flags = LAVA_PROOF | FIRE_PROOF | UNACIDABLE | ACID_PROOF
 
 /obj/effect/dummy/slaughter/relaymove(mob/user, direction)
 	forceMove(get_step(src,direction))

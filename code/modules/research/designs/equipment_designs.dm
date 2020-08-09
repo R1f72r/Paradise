@@ -8,7 +8,7 @@
 	req_tech = list("materials" = 4, "engineering" = 5, "bluespace" = 3, "plasmatech" = 4)
 	build_type = PROTOLATHE
 	materials = list(MAT_METAL = 1000, MAT_GLASS = 500, MAT_PLASMA = 1500, MAT_URANIUM = 200)
-	build_path = /obj/item/weapon/weldingtool/experimental
+	build_path = /obj/item/weldingtool/experimental
 	category = list("Equipment")
 
 /datum/design/health_hud
@@ -98,14 +98,24 @@
 	req_tech = list("materials" = 4, "engineering" = 4)
 	build_type = PROTOLATHE
 	materials = list(MAT_METAL = 4000, MAT_BANANIUM = 1000)
-	build_path = /obj/item/weapon/bikehorn/airhorn
+	build_path = /obj/item/bikehorn/airhorn
+	category = list("Equipment")
+
+/datum/design/breath_mask
+	name = "Breath mask"
+	desc = "A close-fitting mask that can be connected to an air supply."
+	id = "breathmask"
+	req_tech = list("toxins" = 3)
+	build_type = PROTOLATHE
+	materials = list(MAT_METAL = 300, MAT_GLASS = 200)
+	build_path = /obj/item/clothing/mask/breath
 	category = list("Equipment")
 
 /datum/design/welding_mask
 	name = "Welding Gas Mask"
 	desc = "A gas mask with built in welding goggles and face shield. Looks like a skull, clearly designed by a nerd."
 	id = "weldingmask"
-	req_tech = list("materials" = 2, "engineering" = 3)
+	req_tech = list("materials" = 2, "engineering" = 3, "toxins" = 3)
 	build_type = PROTOLATHE
 	materials = list(MAT_METAL = 3000, MAT_GLASS = 1000)
 	build_path = /obj/item/clothing/mask/gas/welding
@@ -115,9 +125,10 @@
 	name = "Portable Seed Extractor"
 	desc = "For the enterprising botanist on the go. Less efficient than the stationary model, it creates one seed per plant."
 	build_type = PROTOLATHE
+	id = "portaseeder"
 	req_tech = list("biotech" = 3, "engineering" = 2)
 	materials = list(MAT_METAL = 1000, MAT_GLASS = 400)
-	build_path = /obj/item/weapon/storage/bag/plants/portaseeder
+	build_path = /obj/item/storage/bag/plants/portaseeder
 	category = list("Equipment")
 
 /datum/design/sci_goggles
@@ -187,7 +198,7 @@
 	req_tech = list("materials" = 4, "engineering" = 6)
 	build_type = PROTOLATHE
 	materials = list(MAT_METAL = 3500, MAT_SILVER = 1500, MAT_TITANIUM = 2500)
-	build_path = /obj/item/weapon/screwdriver/power
+	build_path = /obj/item/screwdriver/power
 	category = list("Equipment")
 
 /datum/design/jawsoflife
@@ -195,7 +206,7 @@
 	desc = "A small, compact Jaws of Life with an interchangable pry jaws and cutting jaws"
 	id = "jawsoflife"
 	req_tech = list("materials" = 4, "engineering" = 6, "magnets" = 6) // added one more requirment since the Jaws of Life are a bit OP
-	build_path = /obj/item/weapon/crowbar/power
+	build_path = /obj/item/crowbar/power
 	build_type = PROTOLATHE
 	materials = list(MAT_METAL = 4500, MAT_SILVER = 2500, MAT_TITANIUM = 3500)
 	category = list("Equipment")
@@ -205,7 +216,7 @@
 	desc = "An advanced wrench obtained through Abductor technology."
 	id = "alien_wrench"
 	req_tech = list("engineering" = 5, "materials" = 5, "abductor" = 4)
-	build_path = /obj/item/weapon/wrench/abductor
+	build_path = /obj/item/wrench/abductor
 	build_type = PROTOLATHE
 	materials = list(MAT_METAL = 5000, MAT_SILVER = 2500, MAT_PLASMA = 1000, MAT_TITANIUM = 2000, MAT_DIAMOND = 2000)
 	category = list("Equipment")
@@ -215,7 +226,7 @@
 	desc = "Advanced wirecutters obtained through Abductor technology."
 	id = "alien_wirecutters"
 	req_tech = list("engineering" = 5, "materials" = 5, "abductor" = 4)
-	build_path = /obj/item/weapon/wirecutters/abductor
+	build_path = /obj/item/wirecutters/abductor
 	build_type = PROTOLATHE
 	materials = list(MAT_METAL = 5000, MAT_SILVER = 2500, MAT_PLASMA = 1000, MAT_TITANIUM = 2000, MAT_DIAMOND = 2000)
 	category = list("Equipment")
@@ -225,7 +236,7 @@
 	desc = "An advanced screwdriver obtained through Abductor technology."
 	id = "alien_screwdriver"
 	req_tech = list("engineering" = 5, "materials" = 5, "abductor" = 4)
-	build_path = /obj/item/weapon/screwdriver/abductor
+	build_path = /obj/item/screwdriver/abductor
 	build_type = PROTOLATHE
 	materials = list(MAT_METAL = 5000, MAT_SILVER = 2500, MAT_PLASMA = 1000, MAT_TITANIUM = 2000, MAT_DIAMOND = 2000)
 	category = list("Equipment")
@@ -235,7 +246,7 @@
 	desc = "An advanced crowbar obtained through Abductor technology."
 	id = "alien_crowbar"
 	req_tech = list("engineering" = 5, "materials" = 5, "abductor" = 4)
-	build_path = /obj/item/weapon/crowbar/abductor
+	build_path = /obj/item/crowbar/abductor
 	build_type = PROTOLATHE
 	materials = list(MAT_METAL = 5000, MAT_SILVER = 2500, MAT_PLASMA = 1000, MAT_TITANIUM = 2000, MAT_DIAMOND = 2000)
 	category = list("Equipment")
@@ -245,7 +256,7 @@
 	desc = "An advanced welding tool obtained through Abductor technology."
 	id = "alien_welder"
 	req_tech = list("engineering" = 5, "plasmatech" = 5, "abductor" = 4)
-	build_path = /obj/item/weapon/weldingtool/abductor
+	build_path = /obj/item/weldingtool/abductor
 	build_type = PROTOLATHE
 	materials = list(MAT_METAL = 5000, MAT_SILVER = 2500, MAT_PLASMA = 5000, MAT_TITANIUM = 2000, MAT_DIAMOND = 2000)
 	category = list("Equipment")
@@ -255,7 +266,17 @@
 	desc = "An advanced multitool obtained through Abductor technology."
 	id = "alien_multitool"
 	req_tech = list("engineering" = 5, "programming" = 5, "abductor" = 4)
-	build_path = /obj/item/device/multitool/abductor
+	build_path = /obj/item/multitool/abductor
 	build_type = PROTOLATHE
 	materials = list(MAT_METAL = 5000, MAT_SILVER = 2500, MAT_PLASMA = 5000, MAT_TITANIUM = 2000, MAT_DIAMOND = 2000)
+	category = list("Equipment")
+
+/datum/design/bluespace_closet
+	name = "Bluespace Closet"
+	desc = "A storage unit that moves and stores through the fourth dimension."
+	id = "bluespace_closet"
+	req_tech = list("engineering" = 4, "programming" = 5, "bluespace" = 5, "magnets" = 4, "plasmatech" = 3)
+	build_path = /obj/structure/closet/bluespace
+	build_type = PROTOLATHE
+	materials = list(MAT_METAL = 5000, MAT_PLASMA = 2500, MAT_TITANIUM = 500, MAT_BLUESPACE = 500)
 	category = list("Equipment")

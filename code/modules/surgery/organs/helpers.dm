@@ -10,6 +10,9 @@
 /mob/proc/get_int_organ_tag(tag) //is it a brain, is it a brain_tumor?
 	return
 
+/mob/living/proc/get_organ(zone)
+	return
+
 /mob/living/carbon/get_int_organ(typepath)
 	return (locate(typepath) in internal_organs)
 
@@ -104,8 +107,8 @@
 	if(flying == 1)
 		return TRUE
 
-	var/obj/item/weapon/tank/jetpack/J
-	if(istype(back,/obj/item/weapon/tank/jetpack))
+	var/obj/item/tank/jetpack/J
+	if(istype(back,/obj/item/tank/jetpack))
 		J = back
 		if(J.on == 1)
 			return TRUE

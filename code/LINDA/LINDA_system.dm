@@ -62,7 +62,7 @@ turf/CanPass(atom/movable/mover, turf/target, height=1.5)
 
 /turf/proc/CalculateAdjacentTurfs()
 	atmos_adjacent_turfs_amount = 0
-	for(var/direction in cardinal)
+	for(var/direction in GLOB.cardinal)
 		var/turf/T = get_step(src, direction)
 		if(!istype(T))
 			continue
@@ -89,7 +89,7 @@ turf/CanPass(atom/movable/mover, turf/target, height=1.5)
 	var/adjacent_turfs = list()
 
 	var/turf/simulated/curloc = src
-	for(var/direction in cardinal)
+	for(var/direction in GLOB.cardinal)
 		if(!(curloc.atmos_adjacent_turfs & direction))
 			continue
 
@@ -99,11 +99,11 @@ turf/CanPass(atom/movable/mover, turf/target, height=1.5)
 	if(!alldir)
 		return adjacent_turfs
 
-	for(var/direction in diagonals)
+	for(var/direction in GLOB.diagonals)
 		var/matchingDirections = 0
 		var/turf/simulated/S = get_step(curloc, direction)
 
-		for(var/checkDirection in cardinal)
+		for(var/checkDirection in GLOB.cardinal)
 			if(!(S.atmos_adjacent_turfs & checkDirection))
 				continue
 			var/turf/simulated/checkTurf = get_step(S, checkDirection)
@@ -126,8 +126,8 @@ turf/CanPass(atom/movable/mover, turf/target, height=1.5)
 /turf/proc/air_update_turf(var/command = 0)
 	if(command)
 		CalculateAdjacentTurfs()
-	if(air_master)
-		air_master.add_to_active(src,command)
+	if(SSair)
+		SSair.add_to_active(src,command)
 
 /atom/movable/proc/move_update_air(var/turf/T)
     if(istype(T,/turf))
@@ -142,46 +142,39 @@ turf/CanPass(atom/movable/mover, turf/target, height=1.5)
 		return
 	T.atmos_spawn_air(text, amount)
 
-var/const/SPAWN_HEAT = 1
-var/const/SPAWN_20C = 2
-var/const/SPAWN_TOXINS = 4
-var/const/SPAWN_OXYGEN = 8
-var/const/SPAWN_CO2 = 16
-var/const/SPAWN_NITROGEN = 32
-
-var/const/SPAWN_N2O = 64
-
-var/const/SPAWN_AIR = 256
-
-/turf/simulated/proc/atmos_spawn_air(var/flag, var/amount)
+/turf/simulated/proc/atmos_spawn_air(flag, amount)
 	if(!text || !amount || !air)
 		return
 
 	var/datum/gas_mixture/G = new
 
-	if(flag & SPAWN_20C)
+	if(flag & LINDA_SPAWN_20C)
 		G.temperature = T20C
 
-	if(flag & SPAWN_HEAT)
+	if(flag & LINDA_SPAWN_HEAT)
 		G.temperature += 1000
 
-	if(flag & SPAWN_TOXINS)
+	if(flag & LINDA_SPAWN_TOXINS)
 		G.toxins += amount
-	if(flag & SPAWN_OXYGEN)
+
+	if(flag & LINDA_SPAWN_OXYGEN)
 		G.oxygen += amount
-	if(flag & SPAWN_CO2)
+
+	if(flag & LINDA_SPAWN_CO2)
 		G.carbon_dioxide += amount
-	if(flag & SPAWN_NITROGEN)
+
+	if(flag & LINDA_SPAWN_NITROGEN)
 		G.nitrogen += amount
 
-	if(flag & SPAWN_N2O)
-		var/datum/gas/sleeping_agent/T = new
-		T.moles += amount
-		G.trace_gases += T
+	if(flag & LINDA_SPAWN_N2O)
+		G.sleeping_agent += amount
 
-	if(flag & SPAWN_AIR)
+	if(flag & LINDA_SPAWN_AGENT_B)
+		G.agent_b += amount
+
+	if(flag & LINDA_SPAWN_AIR)
 		G.oxygen += MOLES_O2STANDARD * amount
 		G.nitrogen += MOLES_N2STANDARD * amount
 
 	air.merge(G)
-	air_master.add_to_active(src, 0)
+	SSair.add_to_active(src, 0)

@@ -3,20 +3,20 @@
 	random = 1
 	wire_count = 7
 
-var/const/NUCLEARBOMB_WIRE_LIGHT		= 1
-var/const/NUCLEARBOMB_WIRE_TIMING		= 2
-var/const/NUCLEARBOMB_WIRE_SAFETY		= 4
+#define NUCLEARBOMB_WIRE_LIGHT 1
+#define NUCLEARBOMB_WIRE_TIMING 2
+#define NUCLEARBOMB_WIRE_SAFETY 4
 
 /datum/wires/nuclearbomb/GetWireName(index)
 	switch(index)
 		if(NUCLEARBOMB_WIRE_LIGHT)
 			return "Bomb Light"
-		
+
 		if(NUCLEARBOMB_WIRE_TIMING)
 			return "Bomb Timing"
-		
+
 		if(NUCLEARBOMB_WIRE_SAFETY)
-			return "Bomb Safety"	
+			return "Bomb Safety"
 
 /datum/wires/nuclearbomb/CanUse(mob/living/L)
 	var/obj/machinery/nuclearbomb/N = holder
@@ -72,11 +72,11 @@ var/const/NUCLEARBOMB_WIRE_SAFETY		= 4
 				if(N.icon_state == "nuclearbomb2")
 					N.icon_state = "nuclearbomb1"
 			N.timing = 0
-			bomb_set = 0
+			GLOB.bomb_set = 0
 		if(NUCLEARBOMB_WIRE_LIGHT)
 			N.lighthack = !N.lighthack
 
 /datum/wires/nuclearbomb/proc/updateUIs()
-	nanomanager.update_uis(src)
+	SSnanoui.update_uis(src)
 	if(holder)
-		nanomanager.update_uis(holder)
+		SSnanoui.update_uis(holder)

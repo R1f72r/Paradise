@@ -1,45 +1,48 @@
 /obj/machinery/atmospherics/unary/cold_sink/freezer
 	name = "freezer"
-	icon = 'icons/obj/Cryogenic2.dmi'
+	icon = 'icons/obj/cryogenic2.dmi'
 	icon_state = "freezer"
 	density = 1
 	var/min_temperature = 0
 	anchored = 1.0
-	use_power = 1
+	use_power = IDLE_POWER_USE
 	current_heat_capacity = 1000
 	layer = 3
+	plane = GAME_PLANE
+	max_integrity = 300
+	armor = list("melee" = 0, "bullet" = 0, "laser" = 0, "energy" = 100, "bomb" = 0, "bio" = 100, "rad" = 100, "fire" = 80, "acid" = 30)
 
 /obj/machinery/atmospherics/unary/cold_sink/freezer/New()
 	..()
 	initialize_directions = dir
 	component_parts = list()
-	component_parts += new /obj/item/weapon/circuitboard/thermomachine(null)
-	component_parts += new /obj/item/weapon/stock_parts/matter_bin(null)
-	component_parts += new /obj/item/weapon/stock_parts/matter_bin(null)
-	component_parts += new /obj/item/weapon/stock_parts/micro_laser(null)
-	component_parts += new /obj/item/weapon/stock_parts/micro_laser(null)
-	component_parts += new /obj/item/weapon/stock_parts/console_screen(null)
+	component_parts += new /obj/item/circuitboard/thermomachine(null)
+	component_parts += new /obj/item/stock_parts/matter_bin(null)
+	component_parts += new /obj/item/stock_parts/matter_bin(null)
+	component_parts += new /obj/item/stock_parts/micro_laser(null)
+	component_parts += new /obj/item/stock_parts/micro_laser(null)
+	component_parts += new /obj/item/stack/sheet/glass(null)
 	component_parts += new /obj/item/stack/cable_coil(null, 1)
 	RefreshParts()
 
 /obj/machinery/atmospherics/unary/cold_sink/freezer/upgraded/New()
 	..()
 	component_parts = list()
-	component_parts += new /obj/item/weapon/circuitboard/thermomachine(null)
-	component_parts += new /obj/item/weapon/stock_parts/matter_bin/super(null)
-	component_parts += new /obj/item/weapon/stock_parts/matter_bin/super(null)
-	component_parts += new /obj/item/weapon/stock_parts/micro_laser/ultra(null)
-	component_parts += new /obj/item/weapon/stock_parts/micro_laser/ultra(null)
-	component_parts += new /obj/item/weapon/stock_parts/console_screen(null)
+	component_parts += new /obj/item/circuitboard/thermomachine(null)
+	component_parts += new /obj/item/stock_parts/matter_bin/super(null)
+	component_parts += new /obj/item/stock_parts/matter_bin/super(null)
+	component_parts += new /obj/item/stock_parts/micro_laser/ultra(null)
+	component_parts += new /obj/item/stock_parts/micro_laser/ultra(null)
+	component_parts += new /obj/item/stack/sheet/glass(null)
 	component_parts += new /obj/item/stack/cable_coil(null, 1)
 	RefreshParts()
 
 /obj/machinery/atmospherics/unary/cold_sink/freezer/RefreshParts()
 	var/H
 	var/T
-	for(var/obj/item/weapon/stock_parts/matter_bin/M in component_parts)
+	for(var/obj/item/stock_parts/matter_bin/M in component_parts)
 		H += M.rating
-	for(var/obj/item/weapon/stock_parts/micro_laser/M in component_parts)
+	for(var/obj/item/stock_parts/micro_laser/M in component_parts)
 		T += M.rating
 	min_temperature = max(0,T0C - (170 + (T*15)))
 	current_heat_capacity = 1000 * ((H - 1) ** 2)
@@ -48,32 +51,38 @@
 	..(dir,dir)
 
 /obj/machinery/atmospherics/unary/cold_sink/freezer/attackby(obj/item/I, mob/user, params)
-	if(default_deconstruction_screwdriver(user, "freezer-o", "freezer", I))
-		on = 0
-		update_icon()
-		return
-
 	if(exchange_parts(user, I))
 		return
+	return ..()
 
-	default_deconstruction_crowbar(I)
+/obj/machinery/atmospherics/unary/cold_sink/freezer/crowbar_act(mob/user, obj/item/I)
+	if(default_deconstruction_crowbar(user, I))
+		return TRUE
 
-	if(istype(I, /obj/item/weapon/wrench))
-		if(!panel_open)
-			to_chat(user, "<span class='notice'>Open the maintenance panel first.</span>")
-			return
-		var/list/choices = list("West" = WEST, "East" = EAST, "South" = SOUTH, "North" = NORTH)
-		var/selected = input(user,"Select a direction for the connector.", "Connector Direction") in choices
-		dir = choices[selected]
-		playsound(src.loc, I.usesound, 50, 1)
-		var/node_connect = dir
-		initialize_directions = dir
-		for(var/obj/machinery/atmospherics/target in get_step(src,node_connect))
-			if(target.initialize_directions & get_dir(target,src))
-				node = target
-				break
-		build_network()
+/obj/machinery/atmospherics/unary/cold_sink/freezer/screwdriver_act(mob/user, obj/item/I)
+	if(default_deconstruction_screwdriver(user, "freezer-o", "freezer", I))
+		on = FALSE
 		update_icon()
+		return TRUE
+
+/obj/machinery/atmospherics/unary/cold_sink/freezer/wrench_act(mob/user, obj/item/I)
+	. = TRUE
+	if(!I.use_tool(src, user, 0, volume = I.tool_volume))
+		return
+	if(!panel_open)
+		to_chat(user, "<span class='notice'>Open the maintenance panel first.</span>")
+		return
+	var/list/choices = list("West" = WEST, "East" = EAST, "South" = SOUTH, "North" = NORTH)
+	var/selected = input(user,"Select a direction for the connector.", "Connector Direction") in choices
+	dir = choices[selected]
+	var/node_connect = dir
+	initialize_directions = dir
+	for(var/obj/machinery/atmospherics/target in get_step(src,node_connect))
+		if(target.initialize_directions & get_dir(target,src))
+			node = target
+			break
+	build_network()
+	update_icon()
 
 /obj/machinery/atmospherics/unary/cold_sink/freezer/update_icon()
 	if(panel_open)
@@ -99,7 +108,7 @@
 
 /obj/machinery/atmospherics/unary/cold_sink/freezer/ui_interact(mob/user, ui_key = "main", var/datum/nanoui/ui = null, var/force_open = 1)
 	// update the ui if it exists, returns null if no ui is passed/found
-	ui = nanomanager.try_update_ui(user, src, ui_key, ui, force_open)
+	ui = SSnanoui.try_update_ui(user, src, ui_key, ui, force_open)
 	if(!ui)
 		// the ui does not exist, so we'll create a new() one
         // for a list of parameters and their descriptions see the code docs in \code\modules\nano\nanoui.dm
@@ -109,7 +118,7 @@
 		// auto update every Master Controller tick
 		ui.set_auto_update(1)
 
-/obj/machinery/atmospherics/unary/cold_sink/freezer/ui_data(mob/user, ui_key = "main", datum/topic_state/state = default_state)
+/obj/machinery/atmospherics/unary/cold_sink/freezer/ui_data(mob/user, ui_key = "main", datum/topic_state/state = GLOB.default_state)
 	var/data[0]
 	data["on"] = on ? 1 : 0
 	data["gasPressure"] = round(air_contents.return_pressure())
@@ -136,7 +145,11 @@
 	if(href_list["toggleStatus"])
 		src.on = !src.on
 		update_icon()
-	if(href_list["temp"])
+	else if(href_list["minimum"])
+		current_temperature = min_temperature
+	else if(href_list["maximum"])
+		current_temperature = T20C
+	else if(href_list["temp"])
 		var/amount = text2num(href_list["temp"])
 		if(amount > 0)
 			src.current_temperature = min(T20C, src.current_temperature+amount)
@@ -153,43 +166,44 @@
 
 /obj/machinery/atmospherics/unary/heat_reservoir/heater/
 	name = "heater"
-	icon = 'icons/obj/Cryogenic2.dmi'
+	icon = 'icons/obj/cryogenic2.dmi'
 	icon_state = "heater"
 	density = 1
 	var/max_temperature = 0
 	anchored = 1.0
 	layer = 3
-
 	current_heat_capacity = 1000
+	max_integrity = 300
+	armor = list("melee" = 0, "bullet" = 0, "laser" = 0, "energy" = 100, "bomb" = 0, "bio" = 100, "rad" = 100, "fire" = 80, "acid" = 30)
 
 /obj/machinery/atmospherics/unary/heat_reservoir/heater/New()
 	..()
 	initialize_directions = dir
-	var/obj/item/weapon/circuitboard/thermomachine/H = new /obj/item/weapon/circuitboard/thermomachine(null)
+	var/obj/item/circuitboard/thermomachine/H = new /obj/item/circuitboard/thermomachine(null)
 	H.build_path = /obj/machinery/atmospherics/unary/heat_reservoir/heater
 	H.name = "circuit board (Heater)"
 	component_parts = list()
 	component_parts += H
-	component_parts += new /obj/item/weapon/stock_parts/matter_bin(src)
-	component_parts += new /obj/item/weapon/stock_parts/matter_bin(src)
-	component_parts += new /obj/item/weapon/stock_parts/micro_laser(src)
-	component_parts += new /obj/item/weapon/stock_parts/micro_laser(src)
-	component_parts += new /obj/item/weapon/stock_parts/console_screen(src)
+	component_parts += new /obj/item/stock_parts/matter_bin(src)
+	component_parts += new /obj/item/stock_parts/matter_bin(src)
+	component_parts += new /obj/item/stock_parts/micro_laser(src)
+	component_parts += new /obj/item/stock_parts/micro_laser(src)
+	component_parts += new /obj/item/stack/sheet/glass(src)
 	component_parts += new /obj/item/stack/cable_coil(src, 1)
 	RefreshParts()
 
 /obj/machinery/atmospherics/unary/heat_reservoir/heater/upgraded/New()
 	..()
-	var/obj/item/weapon/circuitboard/thermomachine/H = new /obj/item/weapon/circuitboard/thermomachine(null)
+	var/obj/item/circuitboard/thermomachine/H = new /obj/item/circuitboard/thermomachine(null)
 	H.build_path = /obj/machinery/atmospherics/unary/heat_reservoir/heater
 	H.name = "circuit board (Heater)"
 	component_parts = list()
 	component_parts += H
-	component_parts += new /obj/item/weapon/stock_parts/matter_bin/super(src)
-	component_parts += new /obj/item/weapon/stock_parts/matter_bin/super(src)
-	component_parts += new /obj/item/weapon/stock_parts/micro_laser/ultra(src)
-	component_parts += new /obj/item/weapon/stock_parts/micro_laser/ultra(src)
-	component_parts += new /obj/item/weapon/stock_parts/console_screen(src)
+	component_parts += new /obj/item/stock_parts/matter_bin/super(src)
+	component_parts += new /obj/item/stock_parts/matter_bin/super(src)
+	component_parts += new /obj/item/stock_parts/micro_laser/ultra(src)
+	component_parts += new /obj/item/stock_parts/micro_laser/ultra(src)
+	component_parts += new /obj/item/stack/sheet/glass(src)
 	component_parts += new /obj/item/stack/cable_coil(src, 1)
 	RefreshParts()
 
@@ -199,40 +213,46 @@
 /obj/machinery/atmospherics/unary/heat_reservoir/heater/RefreshParts()
 	var/H
 	var/T
-	for(var/obj/item/weapon/stock_parts/matter_bin/M in component_parts)
+	for(var/obj/item/stock_parts/matter_bin/M in component_parts)
 		H += M.rating
-	for(var/obj/item/weapon/stock_parts/micro_laser/M in component_parts)
+	for(var/obj/item/stock_parts/micro_laser/M in component_parts)
 		T += M.rating
 	max_temperature = T20C + (140 * T)
 	current_heat_capacity = 1000 * ((H - 1) ** 2)
 
 /obj/machinery/atmospherics/unary/heat_reservoir/heater/attackby(obj/item/I, mob/user, params)
+	if(exchange_parts(user, I))
+		return
+	return ..()
+
+/obj/machinery/atmospherics/unary/heat_reservoir/heater/crowbar_act(mob/user, obj/item/I)
+	if(default_deconstruction_crowbar(user, I))
+		return TRUE
+
+/obj/machinery/atmospherics/unary/heat_reservoir/heater/screwdriver_act(mob/user, obj/item/I)
 	if(default_deconstruction_screwdriver(user, "heater-o", "heater", I))
 		on = 0
 		update_icon()
+		return TRUE
+
+/obj/machinery/atmospherics/unary/heat_reservoir/heater/wrench_act(mob/user, obj/item/I)
+	. = TRUE
+	if(!I.use_tool(src, user, 0, volume = I.tool_volume))
 		return
-
-	if(exchange_parts(user, I))
+	if(!panel_open)
+		to_chat(user, "<span class='notice'>Open the maintenance panel first.</span>")
 		return
-
-	default_deconstruction_crowbar(I)
-
-	if(istype(I, /obj/item/weapon/wrench))
-		if(!panel_open)
-			to_chat(user, "<span class='notice'>Open the maintenance panel first.</span>")
-			return
-		var/list/choices = list("West" = WEST, "East" = EAST, "South" = SOUTH, "North" = NORTH)
-		var/selected = input(user,"Select a direction for the connector.", "Connector Direction") in choices
-		dir = choices[selected]
-		playsound(src.loc, I.usesound, 50, 1)
-		var/node_connect = dir
-		initialize_directions = dir
-		for(var/obj/machinery/atmospherics/target in get_step(src,node_connect))
-			if(target.initialize_directions & get_dir(target,src))
-				node = target
-				break
-		build_network()
-		update_icon()
+	var/list/choices = list("West" = WEST, "East" = EAST, "South" = SOUTH, "North" = NORTH)
+	var/selected = input(user,"Select a direction for the connector.", "Connector Direction") in choices
+	dir = choices[selected]
+	var/node_connect = dir
+	initialize_directions = dir
+	for(var/obj/machinery/atmospherics/target in get_step(src,node_connect))
+		if(target.initialize_directions & get_dir(target,src))
+			node = target
+			break
+	build_network()
+	update_icon()
 
 /obj/machinery/atmospherics/unary/heat_reservoir/heater/update_icon()
 	if(panel_open)
@@ -257,7 +277,7 @@
 
 /obj/machinery/atmospherics/unary/heat_reservoir/heater/ui_interact(mob/user, ui_key = "main", var/datum/nanoui/ui = null, var/force_open = 1)
 	// update the ui if it exists, returns null if no ui is passed/found
-	ui = nanomanager.try_update_ui(user, src, ui_key, ui, force_open)
+	ui = SSnanoui.try_update_ui(user, src, ui_key, ui, force_open)
 	if(!ui)
 		// the ui does not exist, so we'll create a new() one
         // for a list of parameters and their descriptions see the code docs in \code\modules\nano\nanoui.dm
@@ -267,7 +287,7 @@
 		// auto update every Master Controller tick
 		ui.set_auto_update(1)
 
-/obj/machinery/atmospherics/unary/heat_reservoir/heater/ui_data(mob/user, ui_key = "main", datum/topic_state/state = default_state)
+/obj/machinery/atmospherics/unary/heat_reservoir/heater/ui_data(mob/user, ui_key = "main", datum/topic_state/state = GLOB.default_state)
 	var/data[0]
 	data["on"] = on ? 1 : 0
 	data["gasPressure"] = round(air_contents.return_pressure())
@@ -292,7 +312,11 @@
 	if(href_list["toggleStatus"])
 		src.on = !src.on
 		update_icon()
-	if(href_list["temp"])
+	else if(href_list["minimum"])
+		current_temperature = T20C
+	else if(href_list["maximum"])
+		current_temperature = max_temperature + T20C
+	else if(href_list["temp"])
 		var/amount = text2num(href_list["temp"])
 		if(amount > 0)
 			src.current_temperature = min((T20C+max_temperature), src.current_temperature+amount)

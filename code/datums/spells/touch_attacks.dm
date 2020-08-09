@@ -1,6 +1,6 @@
 /obj/effect/proc_holder/spell/targeted/touch
-	var/hand_path = /obj/item/weapon/melee/touch_attack
-	var/obj/item/weapon/melee/touch_attack/attached_hand = null
+	var/hand_path = /obj/item/melee/touch_attack
+	var/obj/item/melee/touch_attack/attached_hand = null
 	invocation_type = "none" //you scream on connecting, not summoning
 	include_user = 1
 	range = -1
@@ -27,12 +27,12 @@
 	var/hand_handled = 1
 	attached_hand = new hand_path(src)
 	if(user.hand) 	//left active hand
-		if(!user.equip_to_slot_if_possible(attached_hand, slot_l_hand, 0, 1, 1))
-			if(!user.equip_to_slot_if_possible(attached_hand, slot_r_hand, 0, 1, 1))
+		if(!user.equip_to_slot_if_possible(attached_hand, slot_l_hand, FALSE, TRUE))
+			if(!user.equip_to_slot_if_possible(attached_hand, slot_r_hand, FALSE, TRUE))
 				hand_handled = 0
 	else			//right active hand
-		if(!user.equip_to_slot_if_possible(attached_hand, slot_r_hand, 0, 1, 1))
-			if(!user.equip_to_slot_if_possible(attached_hand, slot_l_hand, 0, 1, 1))
+		if(!user.equip_to_slot_if_possible(attached_hand, slot_r_hand, FALSE, TRUE))
+			if(!user.equip_to_slot_if_possible(attached_hand, slot_l_hand, FALSE, TRUE))
 				hand_handled = 0
 	if(!hand_handled)
 		qdel(attached_hand)
@@ -47,7 +47,7 @@
 /obj/effect/proc_holder/spell/targeted/touch/disintegrate
 	name = "Disintegrate"
 	desc = "This spell charges your hand with vile energy that can be used to violently explode victims."
-	hand_path = /obj/item/weapon/melee/touch_attack/disintegrate
+	hand_path = /obj/item/melee/touch_attack/disintegrate
 
 	school = "evocation"
 	charge_max = 600
@@ -59,7 +59,7 @@
 /obj/effect/proc_holder/spell/targeted/touch/flesh_to_stone
 	name = "Flesh to Stone"
 	desc = "This spell charges your hand with the power to turn victims into inert statues for a long period of time."
-	hand_path = /obj/item/weapon/melee/touch_attack/fleshtostone
+	hand_path = /obj/item/melee/touch_attack/fleshtostone
 
 	school = "transmutation"
 	charge_max = 600

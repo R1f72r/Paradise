@@ -5,10 +5,12 @@
 /obj/machinery/door/airlock/command
 	icon = 'icons/obj/doors/airlocks/station/command.dmi'
 	assemblytype = /obj/structure/door_assembly/door_assembly_com
+	normal_integrity = 450
 
 /obj/machinery/door/airlock/security
 	icon = 'icons/obj/doors/airlocks/station/security.dmi'
 	assemblytype = /obj/structure/door_assembly/door_assembly_sec
+	normal_integrity = 450
 
 /obj/machinery/door/airlock/engineering
 	icon = 'icons/obj/doors/airlocks/station/engineering.dmi'
@@ -22,6 +24,7 @@
 	name = "maintenance access"
 	icon = 'icons/obj/doors/airlocks/station/maintenance.dmi'
 	assemblytype = /obj/structure/door_assembly/door_assembly_mai
+	normal_integrity = 250
 
 /obj/machinery/door/airlock/maintenance/external
 	name = "external airlock access"
@@ -63,6 +66,7 @@
 /obj/machinery/door/airlock/command/glass
 	opacity = 0
 	glass = TRUE
+	normal_integrity = 400
 
 /obj/machinery/door/airlock/engineering/glass
 	opacity = 0
@@ -71,6 +75,7 @@
 /obj/machinery/door/airlock/security/glass
 	opacity = 0
 	glass = TRUE
+	normal_integrity = 400
 
 /obj/machinery/door/airlock/medical/glass
 	opacity = 0
@@ -99,6 +104,7 @@
 /obj/machinery/door/airlock/maintenance/external/glass
 	opacity = 0
 	glass = TRUE
+	normal_integrity = 200
 
 //////////////////////////////////
 /*
@@ -109,6 +115,7 @@
 	name = "gold airlock"
 	icon = 'icons/obj/doors/airlocks/station/gold.dmi'
 	assemblytype = /obj/structure/door_assembly/door_assembly_gold
+	paintable = FALSE
 
 /obj/machinery/door/airlock/gold/glass
 	opacity = 0
@@ -118,6 +125,7 @@
 	name = "silver airlock"
 	icon = 'icons/obj/doors/airlocks/station/silver.dmi'
 	assemblytype = /obj/structure/door_assembly/door_assembly_silver
+	paintable = FALSE
 
 /obj/machinery/door/airlock/silver/glass
 	opacity = 0
@@ -127,9 +135,12 @@
 	name = "diamond airlock"
 	icon = 'icons/obj/doors/airlocks/station/diamond.dmi'
 	assemblytype = /obj/structure/door_assembly/door_assembly_diamond
+	normal_integrity = 1000
 	explosion_block = 2
+	paintable = FALSE
 
 /obj/machinery/door/airlock/diamond/glass
+	normal_integrity = 950
 	opacity = 0
 	glass = TRUE
 
@@ -138,17 +149,20 @@
 	desc = "And they said I was crazy."
 	icon = 'icons/obj/doors/airlocks/station/uranium.dmi'
 	assemblytype = /obj/structure/door_assembly/door_assembly_uranium
+	paintable = FALSE
 	var/event_step = 20
 
 /obj/machinery/door/airlock/uranium/New()
 	..()
-	addtimer(src, "radiate", event_step)
+	addtimer(CALLBACK(src, .proc/radiate), event_step)
+
 
 /obj/machinery/door/airlock/uranium/proc/radiate()
 	if(prob(50))
 		for(var/mob/living/L in range (3,src))
 			L.apply_effect(15,IRRADIATE,0)
-	addtimer(src, "radiate", event_step)
+	addtimer(CALLBACK(src, .proc/radiate), event_step)
+
 
 /obj/machinery/door/airlock/uranium/glass
 	opacity = 0
@@ -159,8 +173,10 @@
 	desc = "No way this can end badly."
 	icon = 'icons/obj/doors/airlocks/station/plasma.dmi'
 	assemblytype = /obj/structure/door_assembly/door_assembly_plasma
+	paintable = FALSE
 
 /obj/machinery/door/airlock/plasma/temperature_expose(datum/gas_mixture/air, exposed_temperature, exposed_volume)
+	..()
 	if(exposed_temperature > 300)
 		PlasmaBurn(exposed_temperature)
 
@@ -169,7 +185,7 @@
 		PlasmaBurn(exposed_temperature)
 
 /obj/machinery/door/airlock/plasma/proc/PlasmaBurn(temperature)
-	atmos_spawn_air(SPAWN_HEAT | SPAWN_TOXINS, 500)
+	atmos_spawn_air(LINDA_SPAWN_HEAT | LINDA_SPAWN_TOXINS, 500)
 	var/obj/structure/door_assembly/DA
 	DA = new /obj/structure/door_assembly(loc)
 	if(glass)
@@ -186,7 +202,8 @@
 		log_game("Plasma airlock ignited by [key_name(user)] in ([x],[y],[z])")
 		investigate_log("was <font color='red'><b>ignited</b></font> by [key_name(user)]","atmos")
 		ignite(is_hot(C))
-	..()
+	else
+		return ..()
 
 /obj/machinery/door/airlock/plasma/BlockSuperconductivity() //we don't stop the heat~
 	return 0
@@ -202,6 +219,7 @@
 	assemblytype = /obj/structure/door_assembly/door_assembly_bananium
 	doorOpen = 'sound/items/bikehorn.ogg'
 	doorClose = 'sound/items/bikehorn.ogg'
+	paintable = FALSE
 
 /obj/machinery/door/airlock/bananium/glass
 	opacity = 0
@@ -215,11 +233,13 @@
 	doorDeni = null
 	boltUp = null
 	boltDown = null
+	paintable = FALSE
 
 /obj/machinery/door/airlock/sandstone
 	name = "sandstone airlock"
 	icon = 'icons/obj/doors/airlocks/station/sandstone.dmi'
 	assemblytype = /obj/structure/door_assembly/door_assembly_sandstone
+	paintable = FALSE
 
 /obj/machinery/door/airlock/sandstone/glass
 	opacity = 0
@@ -229,6 +249,7 @@
 	name = "wooden airlock"
 	icon = 'icons/obj/doors/airlocks/station/wood.dmi'
 	assemblytype = /obj/structure/door_assembly/door_assembly_wood
+	paintable = FALSE
 
 /obj/machinery/door/airlock/wood/glass
 	opacity = 0
@@ -239,8 +260,11 @@
 	assemblytype = /obj/structure/door_assembly/door_assembly_titanium
 	icon = 'icons/obj/doors/airlocks/shuttle/shuttle.dmi'
 	overlays_file = 'icons/obj/doors/airlocks/shuttle/overlays.dmi'
+	normal_integrity = 400
+	paintable = FALSE
 
 /obj/machinery/door/airlock/titanium/glass
+	normal_integrity = 350
 	opacity = 0
 	glass = TRUE
 
@@ -287,6 +311,8 @@
 	opacity = 0
 	explosion_block = 2
 	assemblytype = /obj/structure/door_assembly/door_assembly_centcom
+	normal_integrity = 1000
+	security_level = 6
 
 //////////////////////////////////
 /*
@@ -299,6 +325,9 @@
 	overlays_file = 'icons/obj/doors/airlocks/vault/overlays.dmi'
 	assemblytype = /obj/structure/door_assembly/door_assembly_vault
 	explosion_block = 2
+	normal_integrity = 400 // reverse engieneerd: 400 * 1.5 (sec lvl 6) = 600 = original
+	security_level = 6
+	paintable = FALSE
 
 //////////////////////////////////
 /*
@@ -311,12 +340,38 @@
 	overlays_file = 'icons/obj/doors/airlocks/hatch/overlays.dmi'
 	note_overlay_file = 'icons/obj/doors/airlocks/hatch/overlays.dmi'
 	assemblytype = /obj/structure/door_assembly/door_assembly_hatch
+	paintable = FALSE
+
+/obj/machinery/door/airlock/hatch/syndicate
+	name = "syndicate hatch"
+	req_access_txt = "150"
+
+/obj/machinery/door/airlock/hatch/syndicate/command
+	name = "Command Center"
+	req_access_txt = "153"
+	explosion_block = 2
+	normal_integrity = 1000
+	security_level = 6
+
+/obj/machinery/door/airlock/hatch/syndicate/command/emag_act(mob/user)
+	to_chat(user, "<span class='notice'>The electronic systems in this door are far too advanced for your primitive hacking peripherals.</span>")
+	return
+
+/obj/machinery/door/airlock/hatch/syndicate/vault
+	name = "syndicate vault hatch"
+	req_access_txt = "151"
+	icon = 'icons/obj/doors/airlocks/vault/vault.dmi'
+	overlays_file = 'icons/obj/doors/airlocks/vault/overlays.dmi'
+	assemblytype = /obj/structure/door_assembly/door_assembly_vault
+	security_level = 6
+	hackProof = TRUE
+	aiControlDisabled = TRUE
 
 /obj/machinery/door/airlock/hatch/gamma
 	name = "gamma level hatch"
 	hackProof = 1
 	aiControlDisabled = 1
-	unacidable = 1
+	resistance_flags = FIRE_PROOF | ACID_PROOF
 	is_special = 1
 
 /obj/machinery/door/airlock/hatch/gamma/attackby(obj/C, mob/user, params)
@@ -324,26 +379,32 @@
 		if(isElectrified())
 			if(shock(user, 75))
 				return
-	if(istype(C, /obj/item/device/detective_scanner) || istype(C, /obj/item/taperoll))
+	if(istype(C, /obj/item/detective_scanner))
 		return
 
-	if(istype(C, /obj/item/weapon/grenade/plastic/c4))
+	if(istype(C, /obj/item/grenade/plastic/c4))
 		to_chat(user, "The hatch is coated with a product that prevents the shaped charge from sticking!")
 		return
 
-	if(istype(C, /obj/item/mecha_parts/mecha_equipment/rcd) || istype(C, /obj/item/weapon/rcd))
+	if(istype(C, /obj/item/mecha_parts/mecha_equipment/rcd) || istype(C, /obj/item/rcd))
 		to_chat(user, "The hatch is made of an advanced compound that cannot be deconstructed using an RCD.")
 		return
 
 	add_fingerprint(user)
-	if((iswelder(C) && !operating && density))
-		var/obj/item/weapon/weldingtool/W = C
-		if(W.remove_fuel(0,user))
-			welded = !welded
-			update_icon()
-			return
-		else
-			return
+
+/obj/machinery/door/airlock/hatch/gamma/welder_act(mob/user, obj/item/I)
+	if(shock_user(user, 75))
+		return
+	if(operating || !density)
+		return
+	. = TRUE
+	if(!I.use_tool(src, user, 0, amount = 0, volume = I.tool_volume))
+		return
+	welded = !welded
+	visible_message("<span class='notice'>[user] [welded ? null : "un"]welds [src]!</span>",\
+					"<span class='notice'>You [welded ? null : "un"]weld [src]!</span>",\
+					"<span class='warning'>You hear welding.</span>")
+	update_icon()
 
 /obj/machinery/door/airlock/maintenance_hatch
 	name = "maintenance hatch"
@@ -351,6 +412,7 @@
 	overlays_file = 'icons/obj/doors/airlocks/hatch/overlays.dmi'
 	note_overlay_file = 'icons/obj/doors/airlocks/hatch/overlays.dmi'
 	assemblytype = /obj/structure/door_assembly/door_assembly_mhatch
+	paintable = FALSE
 
 //////////////////////////////////
 /*
@@ -363,6 +425,10 @@
 	overlays_file = 'icons/obj/doors/airlocks/highsec/overlays.dmi'
 	assemblytype = /obj/structure/door_assembly/door_assembly_highsecurity
 	explosion_block = 2
+	normal_integrity = 500
+	security_level = 1
+	damage_deflection = 30
+	paintable = FALSE
 
 /obj/machinery/door/airlock/highsecurity/red
 	name = "secure armory airlock"
@@ -374,21 +440,26 @@
 		if(isElectrified())
 			if(shock(user, 75))
 				return
-	if(istype(C, /obj/item/device/detective_scanner) || istype(C, /obj/item/taperoll))
+	if(istype(C, /obj/item/detective_scanner))
 		return
 
 	add_fingerprint(user)
-	if((iswelder(C) && !operating && density))
-		var/obj/item/weapon/weldingtool/W = C
-		if(W.remove_fuel(0,user))
-			if(!welded)
-				welded = 1
-			else
-				welded = null
-			update_icon()
-			return
-		else
-			return
+
+
+/obj/machinery/door/airlock/highsecurity/red/welder_act(mob/user, obj/item/I)
+	if(shock_user(user, 75))
+		return
+	if(operating || !density)
+		return
+	. = TRUE
+	if(!I.use_tool(src, user, 0, volume = I.tool_volume))
+		return
+	welded = !welded
+	visible_message("<span class='notice'>[user] [welded ? null : "un"]welds [src]!</span>",\
+					"<span class='notice'>You [welded ? null : "un"]weld [src]!</span>",\
+					"<span class='warning'>You hear welding.</span>")
+	update_icon()
+
 
 //////////////////////////////////
 /*
@@ -400,6 +471,7 @@
 	icon = 'icons/obj/doors/airlocks/shuttle/shuttle.dmi'
 	overlays_file = 'icons/obj/doors/airlocks/shuttle/overlays.dmi'
 	assemblytype = /obj/structure/door_assembly/door_assembly_shuttle
+	paintable = FALSE
 
 /obj/machinery/door/airlock/shuttle/glass
 	opacity = 0
@@ -412,9 +484,13 @@
 	overlays_file = 'icons/obj/doors/airlocks/abductor/overlays.dmi'
 	note_overlay_file = 'icons/obj/doors/airlocks/external/overlays.dmi'
 	assemblytype = /obj/structure/door_assembly/door_assembly_abductor
+	damage_deflection = 30
 	explosion_block = 3
 	hackProof = TRUE
 	aiControlDisabled = 1
+	normal_integrity = 700
+	security_level = 1
+	paintable = FALSE
 
 //////////////////////////////////
 /*
@@ -424,15 +500,20 @@
 /obj/machinery/door/airlock/cult
 	name = "cult airlock"
 	icon = 'icons/obj/doors/airlocks/cult/runed/cult.dmi'
-	overlays_file = 'icons/obj/doors/airlocks/cult/runed/overlays.dmi'
+	overlays_file = 'icons/obj/doors/airlocks/cult/runed/cult-overlays.dmi'
 	assemblytype = /obj/structure/door_assembly/door_assembly_cult
+	damage_deflection = 10
 	hackProof = TRUE
 	aiControlDisabled = TRUE
+	paintable = FALSE
 	var/openingoverlaytype = /obj/effect/temp_visual/cult/door
 	var/friendly = FALSE
 
-/obj/machinery/door/airlock/cult/New()
-	..()
+/obj/machinery/door/airlock/cult/Initialize()
+	. = ..()
+	icon = SSticker.cultdat?.airlock_runed_icon_file
+	overlays_file = SSticker.cultdat?.airlock_runed_overlays_file
+	update_icon()
 	new openingoverlaytype(loc)
 
 /obj/machinery/door/airlock/cult/canAIControl(mob/user)
@@ -464,14 +545,24 @@
 	glass = TRUE
 	opacity = 0
 
+/obj/machinery/door/airlock/cult/glass/Initialize()
+	. = ..()
+	update_icon()
+
 /obj/machinery/door/airlock/cult/glass/friendly
 	friendly = TRUE
 
 /obj/machinery/door/airlock/cult/unruned
 	icon = 'icons/obj/doors/airlocks/cult/unruned/cult.dmi'
-	overlays_file = 'icons/obj/doors/airlocks/cult/unruned/overlays.dmi'
+	overlays_file = 'icons/obj/doors/airlocks/cult/unruned/cult-overlays.dmi'
 	assemblytype = /obj/structure/door_assembly/door_assembly_cult/unruned
 	openingoverlaytype = /obj/effect/temp_visual/cult/door/unruned
+
+/obj/machinery/door/airlock/cult/unruned/Initialize()
+	. = ..()
+	icon = SSticker.cultdat?.airlock_unruned_icon_file
+	overlays_file = SSticker.cultdat?.airlock_unruned_overlays_file
+	update_icon()
 
 /obj/machinery/door/airlock/cult/unruned/friendly
 	friendly = TRUE
@@ -479,6 +570,10 @@
 /obj/machinery/door/airlock/cult/unruned/glass
 	glass = TRUE
 	opacity = 0
+
+/obj/machinery/door/airlock/cult/unruned/glass/Initialize()
+	. = ..()
+	update_icon()
 
 /obj/machinery/door/airlock/cult/unruned/glass/friendly
 	friendly = TRUE
@@ -496,7 +591,8 @@
 	icon = 'icons/obj/doors/airlocks/glass_large/glass_large.dmi'
 	overlays_file = 'icons/obj/doors/airlocks/glass_large/overlays.dmi'
 	note_overlay_file = 'icons/obj/doors/airlocks/glass_large/overlays.dmi'
-	assemblytype = "obj/structure/door_assembly/multi_tile"
+	assemblytype = /obj/structure/door_assembly/multi_tile
+	paintable = FALSE
 
 /obj/machinery/door/airlock/multi_tile/narsie_act()
 	return

@@ -1,4 +1,4 @@
-/obj/item/weapon/melee/powerfist
+/obj/item/melee/powerfist
 	name = "power-fist"
 	desc = "A metal gauntlet with a piston-powered ram ontop for that extra 'ompfh' in your punch."
 	icon_state = "powerfist"
@@ -9,49 +9,59 @@
 	throwforce = 10
 	throw_range = 7
 	w_class = WEIGHT_CLASS_NORMAL
+	armor = list("melee" = 0, "bullet" = 0, "laser" = 0, "energy" = 0, "bomb" = 0, "bio" = 0, "rad" = 0, "fire" = 100, "acid" = 40)
+	resistance_flags = FIRE_PROOF
 	origin_tech = "combat=5;powerstorage=3;syndicate=3"
 	var/click_delay = 1.5
 	var/fisto_setting = 1
 	var/gasperfist = 3
-	var/obj/item/weapon/tank/tank = null //Tank used for the gauntlet's piston-ram.
+	var/obj/item/tank/tank = null //Tank used for the gauntlet's piston-ram.
 
 
-/obj/item/weapon/melee/powerfist/Destroy()
+/obj/item/melee/powerfist/Destroy()
 	QDEL_NULL(tank)
 	return ..()
 
-/obj/item/weapon/melee/powerfist/examine(mob/user)
-	..()
+/obj/item/melee/powerfist/examine(mob/user)
+	. = ..()
 	if(!in_range(user, src))
-		to_chat(user, "<span class='notice'>You'll need to get closer to see any more.</span>")
-		return
-	if(tank)
-		to_chat(user, "<span class='notice'>[bicon(tank)] It has [tank] mounted onto it.</span>")
+		. += "<span class='notice'>You'll need to get closer to see any more.</span>"
+	else if(tank)
+		. += "<span class='notice'>[bicon(tank)] It has [tank] mounted onto it.</span>"
 
-/obj/item/weapon/melee/powerfist/attackby(obj/item/weapon/W, mob/user, params)
-	if(istype(W, /obj/item/weapon/tank))
+/obj/item/melee/powerfist/attackby(obj/item/W, mob/user, params)
+	if(istype(W, /obj/item/tank))
 		if(!tank)
-			var/obj/item/weapon/tank/IT = W
+			var/obj/item/tank/IT = W
 			if(IT.volume <= 3)
 				to_chat(user, "<span class='warning'>[IT] is too small for [src].</span>")
 				return
 			updateTank(W, 0, user)
-	else if(iswrench(W))
-		switch(fisto_setting)
-			if(1)
-				fisto_setting = 2
-			if(2)
-				fisto_setting = 3
-			if(3)
-				fisto_setting = 1
-		playsound(loc, W.usesound, 50, 1)
-		to_chat(user, "<span class='notice'>You tweak [src]'s piston valve to [fisto_setting].</span>")
-	else if(isscrewdriver(W))
-		if(tank)
-			updateTank(tank, 1, user)
+			return
+	return ..()
 
+/obj/item/melee/powerfist/wrench_act(mob/user, obj/item/I)
+	. = TRUE
+	if(!I.use_tool(src, user, 0, volume = I.tool_volume))
+		return
+	switch(fisto_setting)
+		if(1)
+			fisto_setting = 2
+		if(2)
+			fisto_setting = 3
+		if(3)
+			fisto_setting = 1
+	to_chat(user, "<span class='notice'>You tweak [src]'s piston valve to [fisto_setting].</span>")
 
-/obj/item/weapon/melee/powerfist/proc/updateTank(obj/item/weapon/tank/thetank, removing = 0, mob/living/carbon/human/user)
+/obj/item/melee/powerfist/screwdriver_act(mob/user, obj/item/I)
+	if(!tank)
+		return
+	. = TRUE
+	if(!I.use_tool(src, user, 0, volume = I.tool_volume))
+		return
+	updateTank(tank, 1, user)
+
+/obj/item/melee/powerfist/proc/updateTank(obj/item/tank/thetank, removing = 0, mob/living/carbon/human/user)
 	if(removing)
 		if(!tank)
 			to_chat(user, "<span class='notice'>[src] currently has no tank attached to it.</span>")
@@ -71,7 +81,7 @@
 		thetank.forceMove(src)
 
 
-/obj/item/weapon/melee/powerfist/attack(mob/living/target, mob/living/user)
+/obj/item/melee/powerfist/attack(mob/living/target, mob/living/user)
 	if(!tank)
 		to_chat(user, "<span class='warning'>[src] can't operate without a source of gas!</span>")
 		return
@@ -83,7 +93,7 @@
 	user.do_attack_animation(target)
 
 	target.apply_damage(force * fisto_setting, BRUTE)
-	target.visible_message("<span class='danger'>[user]'s powerfist lets out a loud hiss as they punch [target.name]!</span>", \
+	target.visible_message("<span class='danger'>[user]'s powerfist lets out a loud hiss as [user.p_they()] punch[user.p_es()] [target.name]!</span>", \
 		"<span class='userdanger'>You cry out in pain as [user]'s punch flings you backwards!</span>")
 	new /obj/effect/temp_visual/kinetic_blast(target.loc)
 	playsound(loc, 'sound/weapons/resonator_blast.ogg', 50, 1)
@@ -93,6 +103,6 @@
 
 	target.throw_at(throw_target, 5 * fisto_setting, 0.2)
 
-	add_logs(user, target, "power fisted", src)
+	add_attack_logs(user, target, "POWER FISTED with [src]")
 
 	user.changeNext_move(CLICK_CD_MELEE * click_delay)

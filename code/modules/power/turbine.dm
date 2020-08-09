@@ -29,6 +29,7 @@
 	icon_state = "compressor"
 	anchored = 1
 	density = 1
+	resistance_flags = FIRE_PROOF
 	var/obj/machinery/power/turbine/turbine
 	var/datum/gas_mixture/gas_contained
 	var/turf/simulated/inturf
@@ -47,6 +48,7 @@
 	icon_state = "turbine"
 	anchored = 1
 	density = 1
+	resistance_flags = FIRE_PROOF
 	var/opened = 0
 	var/obj/machinery/power/compressor/compressor
 	var/turf/simulated/outturf
@@ -58,32 +60,28 @@
 	desc = "A computer to remotely control a gas turbine"
 	icon_screen = "turbinecomp"
 	icon_keyboard = "tech_key"
-	circuit = /obj/item/weapon/circuitboard/turbine_computer
+	circuit = /obj/item/circuitboard/turbine_computer
 	var/obj/machinery/power/compressor/compressor
 	var/id = 0
 
 // the inlet stage of the gas turbine electricity generator
 
-/obj/machinery/power/compressor/New()
-	..()
+/obj/machinery/power/compressor/Initialize(mapload)
+	. = ..()
 	component_parts = list()
-	component_parts += new /obj/item/weapon/circuitboard/power_compressor(null)
-	component_parts += new /obj/item/weapon/stock_parts/manipulator(null)
-	component_parts += new /obj/item/weapon/stock_parts/manipulator(null)
-	component_parts += new /obj/item/weapon/stock_parts/manipulator(null)
-	component_parts += new /obj/item/weapon/stock_parts/manipulator(null)
-	component_parts += new /obj/item/weapon/stock_parts/manipulator(null)
-	component_parts += new /obj/item/weapon/stock_parts/manipulator(null)
+	component_parts += new /obj/item/circuitboard/power_compressor(null)
+	component_parts += new /obj/item/stock_parts/manipulator(null)
+	component_parts += new /obj/item/stock_parts/manipulator(null)
+	component_parts += new /obj/item/stock_parts/manipulator(null)
+	component_parts += new /obj/item/stock_parts/manipulator(null)
+	component_parts += new /obj/item/stock_parts/manipulator(null)
+	component_parts += new /obj/item/stock_parts/manipulator(null)
 	component_parts += new /obj/item/stack/cable_coil(null, 5)
 	RefreshParts()
 // The inlet of the compressor is the direction it faces
 
 	gas_contained = new
 	inturf = get_step(src, dir)
-
-
-/obj/machinery/power/compressor/initialize()
-	..()
 	locate_machinery()
 	if(!turbine)
 		stat |= BROKEN
@@ -107,14 +105,11 @@
 
 /obj/machinery/power/compressor/RefreshParts()
 	var/E = 0
-	for(var/obj/item/weapon/stock_parts/manipulator/M in component_parts)
+	for(var/obj/item/stock_parts/manipulator/M in component_parts)
 		E += M.rating
 	efficiency = E / 6
 
 /obj/machinery/power/compressor/attackby(obj/item/I, mob/user, params)
-	if(default_deconstruction_screwdriver(user, initial(icon_state), initial(icon_state), I))
-		return
-
 	if(default_change_direction_wrench(user, I))
 		turbine = null
 		inturf = get_step(src, dir)
@@ -130,7 +125,16 @@
 	if(exchange_parts(user, I))
 		return
 
-	default_deconstruction_crowbar(I)
+
+	return ..()
+
+/obj/machinery/power/compressor/crowbar_act(mob/user, obj/item/I)
+	if(default_deconstruction_crowbar(user, I))
+		return TRUE
+
+/obj/machinery/power/compressor/screwdriver_act(mob/user, obj/item/I)
+	if(default_deconstruction_screwdriver(user, initial(icon_state), initial(icon_state), I))
+		return TRUE
 
 /obj/machinery/power/compressor/CanAtmosPass(turf/T)
 	return !density
@@ -185,32 +189,28 @@
 #define TURBGENQ 100000
 #define TURBGENG 0.5
 
-/obj/machinery/power/turbine/New()
-	..()
+/obj/machinery/power/turbine/Initialize(mapload)
+	. = ..()
 	component_parts = list()
-	component_parts += new /obj/item/weapon/circuitboard/power_turbine(src)
-	component_parts += new /obj/item/weapon/stock_parts/capacitor(src)
-	component_parts += new /obj/item/weapon/stock_parts/capacitor(src)
-	component_parts += new /obj/item/weapon/stock_parts/capacitor(src)
-	component_parts += new /obj/item/weapon/stock_parts/capacitor(src)
-	component_parts += new /obj/item/weapon/stock_parts/capacitor(src)
-	component_parts += new /obj/item/weapon/stock_parts/capacitor(src)
+	component_parts += new /obj/item/circuitboard/power_turbine(src)
+	component_parts += new /obj/item/stock_parts/capacitor(src)
+	component_parts += new /obj/item/stock_parts/capacitor(src)
+	component_parts += new /obj/item/stock_parts/capacitor(src)
+	component_parts += new /obj/item/stock_parts/capacitor(src)
+	component_parts += new /obj/item/stock_parts/capacitor(src)
+	component_parts += new /obj/item/stock_parts/capacitor(src)
 	component_parts += new /obj/item/stack/cable_coil(src, 5)
 	RefreshParts()
 // The outlet is pointed at the direction of the turbine component
 
 	outturf = get_step(src, dir)
-
-
-/obj/machinery/power/turbine/initialize()
-	..()
 	locate_machinery()
 	if(!compressor)
 		stat |= BROKEN
 
 /obj/machinery/power/turbine/RefreshParts()
 	var/P = 0
-	for(var/obj/item/weapon/stock_parts/capacitor/C in component_parts)
+	for(var/obj/item/stock_parts/capacitor/C in component_parts)
 		P += C.rating
 	productivity = P / 6
 
@@ -289,7 +289,9 @@
 	if(exchange_parts(user, I))
 		return
 
-	default_deconstruction_crowbar(I)
+	if(default_deconstruction_crowbar(user, I))
+		return
+	return ..()
 
 /obj/machinery/power/turbine/interact(mob/user)
 
@@ -341,7 +343,7 @@
 
 
 
-/obj/machinery/computer/turbine_computer/initialize()
+/obj/machinery/computer/turbine_computer/Initialize()
 	..()
 	spawn(10)
 		locate_machinery()

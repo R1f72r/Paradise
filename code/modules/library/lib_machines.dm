@@ -1,12 +1,7 @@
 #define LIBRARY_BOOKS_PER_PAGE 25
 
-var/global/datum/library_catalog/library_catalog = new()
-var/global/list/library_section_names = list("Any", "Fiction", "Non-Fiction", "Adult", "Reference", "Religion")
-
-
-/hook/startup/proc/load_manuals()
-	library_catalog.initialize()
-	return 1
+GLOBAL_DATUM_INIT(library_catalog, /datum/library_catalog, new())
+GLOBAL_LIST_INIT(library_section_names, list("Any", "Fiction", "Non-Fiction", "Adult", "Reference", "Religion"))
 
 /*
  * Borrowbook datum
@@ -29,7 +24,7 @@ var/global/list/library_section_names = list("Any", "Fiction", "Non-Fiction", "A
 	var/content
 	var/programmatic=0                // Is the book programmatically added to the catalog?
 	var/forbidden=0
-	var/path = /obj/item/weapon/book // Type path of the book to generate
+	var/path = /obj/item/book // Type path of the book to generate
 	var/flagged = 0
 
 /datum/cachedbook/proc/LoadFromRow(var/list/row)
@@ -65,10 +60,10 @@ var/global/list/library_section_names = list("Any", "Fiction", "Non-Fiction", "A
 /datum/library_catalog
 	var/list/cached_books = list()
 
-/datum/library_catalog/proc/initialize()
+/datum/library_catalog/New()
 	var/newid=1
-	for(var/typepath in subtypesof(/obj/item/weapon/book/manual))
-		var/obj/item/weapon/book/B = new typepath(null)
+	for(var/typepath in subtypesof(/obj/item/book/manual))
+		var/obj/item/book/B = new typepath(null)
 		var/datum/cachedbook/CB = new()
 		CB.forbidden = B.forbidden
 		CB.title = B.name
@@ -98,7 +93,7 @@ var/global/list/library_section_names = list("Any", "Fiction", "Non-Fiction", "A
 	var/sqlid = text2num(id)
 	if(!sqlid)
 		return
-	var/DBQuery/query = dbcon.NewQuery("UPDATE [format_table_name("library")] SET flagged = flagged + 1 WHERE id=[sqlid]")
+	var/DBQuery/query = GLOB.dbcon.NewQuery("UPDATE [format_table_name("library")] SET flagged = flagged + 1 WHERE id=[sqlid]")
 	query.Execute()
 
 /datum/library_catalog/proc/rmBookByID(mob/user, id)
@@ -111,7 +106,7 @@ var/global/list/library_section_names = list("Any", "Fiction", "Non-Fiction", "A
 	var/sqlid = text2num(id)
 	if(!sqlid)
 		return
-	var/DBQuery/query = dbcon.NewQuery("DELETE FROM [format_table_name("library")] WHERE id=[sqlid]")
+	var/DBQuery/query = GLOB.dbcon.NewQuery("DELETE FROM [format_table_name("library")] WHERE id=[sqlid]")
 	query.Execute()
 
 /datum/library_catalog/proc/getBookByID(id)
@@ -121,7 +116,7 @@ var/global/list/library_section_names = list("Any", "Fiction", "Non-Fiction", "A
 	var/sqlid = text2num(id)
 	if(!sqlid)
 		return
-	var/DBQuery/query = dbcon.NewQuery("SELECT id, author, title, category, content, ckey, flagged FROM [format_table_name("library")] WHERE id=[sqlid]")
+	var/DBQuery/query = GLOB.dbcon.NewQuery("SELECT id, author, title, category, content, ckey, flagged FROM [format_table_name("library")] WHERE id=[sqlid]")
 	query.Execute()
 
 	var/list/results=list()
@@ -148,10 +143,18 @@ var/global/list/library_section_names = list("Any", "Fiction", "Non-Fiction", "A
 	icon_state = "bigscanner"
 	anchored = 1
 	density = 1
-	var/obj/item/weapon/book/cache		// Last scanned book
+	var/obj/item/book/cache		// Last scanned book
 
 /obj/machinery/libraryscanner/attackby(obj/item/I, mob/user)
-	if(istype(I, /obj/item/weapon/book))
+	if(default_unfasten_wrench(user, I))
+		power_change()
+		return
+	if(istype(I, /obj/item/book))
+		// NT with those pesky DRM schemes
+		var/obj/item/book/B = I
+		if(B.has_drm)
+			atom_say("Copyrighted material detected. Scanner is unable to copy book to memory.")
+			return FALSE
 		user.drop_item()
 		I.forceMove(src)
 		return 1
@@ -183,13 +186,13 @@ var/global/list/library_section_names = list("Any", "Fiction", "Non-Fiction", "A
 		return
 
 	if(href_list["scan"])
-		for(var/obj/item/weapon/book/B in contents)
+		for(var/obj/item/book/B in contents)
 			cache = B
 			break
 	if(href_list["clear"])
 		cache = null
 	if(href_list["eject"])
-		for(var/obj/item/weapon/book/B in contents)
+		for(var/obj/item/book/B in contents)
 			B.loc = src.loc
 	src.add_fingerprint(usr)
 	src.updateUsrDialog()
@@ -207,14 +210,17 @@ var/global/list/library_section_names = list("Any", "Fiction", "Non-Fiction", "A
 	density = 1
 
 /obj/machinery/bookbinder/attackby(obj/item/I, mob/user)
-	var/obj/item/weapon/paper/P = I
+	var/obj/item/paper/P = I
+	if(default_unfasten_wrench(user, I))
+		power_change()
+		return
 	if(istype(P))
 		user.drop_item()
 		user.visible_message("[user] loads some paper into [src].", "You load some paper into [src].")
 		src.visible_message("[src] begins to hum as it warms up its printing drums.")
 		sleep(rand(200,400))
 		src.visible_message("[src] whirs as it prints and binds a new book.")
-		var/obj/item/weapon/book/b = new(loc)
+		var/obj/item/book/b = new(loc)
 		b.dat = P.info
 		b.name = "Print Job #[rand(100, 999)]"
 		b.icon_state = "book[rand(1,16)]"

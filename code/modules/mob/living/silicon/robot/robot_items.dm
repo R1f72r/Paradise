@@ -1,12 +1,12 @@
 // A special pen for service droids. Can be toggled to switch between normal writing mode, and paper rename mode
 // Allows service droids to rename paper items.
 
-/obj/item/weapon/pen/multi/robopen
+/obj/item/pen/multi/robopen
 	desc = "A black ink printing attachment with a paper naming mode."
 	name = "Printing Pen"
 	var/mode = 1
 
-/obj/item/weapon/pen/multi/robopen/attack_self(mob/user as mob)
+/obj/item/pen/multi/robopen/attack_self(mob/user as mob)
 
 	var/choice = input("Would you like to change colour or mode?") as null|anything in list("Colour","Mode")
 	if(!choice) return
@@ -29,7 +29,7 @@
 // Copied over from paper's rename verb
 // see code\modules\paperwork\paper.dm line 62
 
-/obj/item/weapon/pen/multi/robopen/proc/RenamePaper(mob/user as mob,obj/paper as obj)
+/obj/item/pen/multi/robopen/proc/RenamePaper(mob/user as mob,obj/paper as obj)
 	if( !user || !paper )
 		return
 	var/n_name = input(user, "What would you like to label the paper?", "Paper Labelling", null)  as text
@@ -43,17 +43,17 @@
 	return
 
 //TODO: Add prewritten forms to dispense when you work out a good way to store the strings.
-/obj/item/weapon/form_printer
+/obj/item/form_printer
 	//name = "paperwork printer"
 	name = "paper dispenser"
 	icon = 'icons/obj/bureaucracy.dmi'
 	icon_state = "paper_bin1"
 	item_state = "sheet-metal"
 
-/obj/item/weapon/form_printer/attack(mob/living/carbon/M as mob, mob/living/carbon/user as mob)
+/obj/item/form_printer/attack(mob/living/carbon/M as mob, mob/living/carbon/user as mob)
 	return
 
-/obj/item/weapon/form_printer/afterattack(atom/target as mob|obj|turf|area, mob/living/user as mob|obj, flag, params)
+/obj/item/form_printer/afterattack(atom/target as mob|obj|turf|area, mob/living/user as mob|obj, flag, params)
 
 	if(!target || !flag)
 		return
@@ -61,36 +61,19 @@
 	if(istype(target,/obj/structure/table))
 		deploy_paper(get_turf(target))
 
-/obj/item/weapon/form_printer/attack_self(mob/user as mob)
+/obj/item/form_printer/attack_self(mob/user as mob)
 	deploy_paper(get_turf(src))
 
-/obj/item/weapon/form_printer/proc/deploy_paper(var/turf/T)
+/obj/item/form_printer/proc/deploy_paper(var/turf/T)
 	T.visible_message("<span class='notice'>\The [src.loc] dispenses a sheet of crisp white paper.</span>")
-	new /obj/item/weapon/paper(T)
+	new /obj/item/paper(T)
 
 
 //Personal shielding for the combat module.
 /obj/item/borg
 	var/powerneeded // Percentage of power remaining required to run item
 
-/obj/item/borg/combat/shield
-	name = "personal shielding"
-	desc = "A powerful experimental module that turns aside or absorbs incoming attacks at the cost of charge."
-	icon = 'icons/obj/decals.dmi'
-	icon_state = "shock"
-	powerneeded = 25
-	var/shield_level = 0.5 //Percentage of damage absorbed by the shield.
-
-/obj/item/borg/combat/shield/verb/set_shield_level()
-	set name = "Set shield level"
-	set category = "Object"
-	set src in range(0)
-
-	var/N = input("How much damage should the shield absorb?") in list("5","10","25","50","75","100")
-	if(N)
-		shield_level = text2num(N)/100
-
-/obj/item/borg/combat/mobility
+/obj/item/borg/destroyer/mobility
 	name = "mobility module"
 	desc = "By retracting limbs and tucking in its head, a combat android can roll at high speeds."
 	icon = 'icons/obj/decals.dmi'

@@ -88,12 +88,12 @@
 					if(!playing || shouldStopPlaying(user)) //If the instrument is playing, or special case
 						playing = 0
 						return
-					if(lentext(note) == 0)
+					if(length(note) == 0)
 						continue
 					var/cur_note = text2ascii(note) - 96
 					if(cur_note < 1 || cur_note > 7)
 						continue
-					for(var/i=2 to lentext(note))
+					for(var/i=2 to length(note))
 						var/ni = copytext(note,i,i+1)
 						if(!text2num(ni))
 							if(ni == "#" || ni == "b" || ni == "n")
@@ -115,13 +115,13 @@
 	if(!instrumentObj)
 		return
 
-	ui = nanomanager.try_update_ui(user, instrumentObj, ui_key, ui, force_open)
+	ui = SSnanoui.try_update_ui(user, instrumentObj, ui_key, ui, force_open)
 	if(!ui)
 		ui = new(user, instrumentObj, ui_key, "song.tmpl", instrumentObj.name, 700, 500)
 		ui.open()
 		ui.set_auto_update(1)
 
-/datum/song/ui_data(mob/user, ui_key = "main", datum/topic_state/state = default_state)
+/datum/song/ui_data(mob/user, ui_key = "main", datum/topic_state/state = GLOB.default_state)
 	var/data[0]
 
 	data["lines"] = lines
@@ -149,7 +149,7 @@
 		lines = new()
 		tempo = sanitize_tempo(5) // default 120 BPM
 		name = ""
-		nanomanager.update_uis(src)
+		SSnanoui.update_uis(src)
 
 	else if(href_list["import"])
 		playing = 0
@@ -159,11 +159,11 @@
 			if(!in_range(instrumentObj, usr))
 				return
 
-			if(lentext(t) >= 12000)
+			if(length(t) >= 12000)
 				var/cont = input(usr, "Your message is too long! Would you like to continue editing it?", "", "yes") in list("yes", "no")
 				if(cont == "no")
 					break
-		while(lentext(t) > 12000)
+		while(length(t) > 12000)
 
 		//split into lines
 		spawn()
@@ -180,16 +180,16 @@
 				lines.Cut(201)
 			var/linenum = 1
 			for(var/l in lines)
-				if(lentext(l) > 200)
+				if(length(l) > 200)
 					to_chat(usr, "Line [linenum] too long!")
 					lines.Remove(l)
 				else
 					linenum++
-		nanomanager.update_uis(src)
+		SSnanoui.update_uis(src)
 
 	else if(href_list["help"])
 		help = !help
-		nanomanager.update_uis(src)
+		SSnanoui.update_uis(src)
 
 	if(href_list["repeat"]) //Changing this from a toggle to a number of repeats to avoid infinite loops.
 		if(playing)
@@ -199,11 +199,11 @@
 			repeat = 0
 		if(repeat > max_repeat)
 			repeat = max_repeat
-		nanomanager.update_uis(src)
+		SSnanoui.update_uis(src)
 
 	else if(href_list["tempo"])
 		tempo = sanitize_tempo(tempo + text2num(href_list["tempo"]) * world.tick_lag)
-		nanomanager.update_uis(src)
+		SSnanoui.update_uis(src)
 
 	else if(href_list["play"])
 		if(playing)
@@ -211,7 +211,7 @@
 		playing = 1
 		spawn()
 			playsong(usr)
-		nanomanager.update_uis(src)
+		SSnanoui.update_uis(src)
 
 	else if(href_list["insertline"])
 		var/num = round(text2num(href_list["insertline"]))
@@ -223,34 +223,34 @@
 			return
 		if(lines.len > 200)
 			return
-		if(lentext(newline) > 200)
+		if(length(newline) > 200)
 			newline = copytext(newline, 1, 200)
 
 		lines.Insert(num, newline)
-		nanomanager.update_uis(src)
+		SSnanoui.update_uis(src)
 
 	else if(href_list["deleteline"])
 		var/num = round(text2num(href_list["deleteline"]))
 		if(num > lines.len || num < 1)
 			return
 		lines.Cut(num, num + 1)
-		nanomanager.update_uis(src)
+		SSnanoui.update_uis(src)
 
 	else if(href_list["modifyline"])
 		var/num = round(text2num(href_list["modifyline"]))
 		var/content = html_encode(input("Enter your line: ", instrumentObj.name, lines[num]) as text|null)
 		if(!content || !in_range(instrumentObj, usr))
 			return
-		if(lentext(content) > 200)
+		if(length(content) > 200)
 			content = copytext(content, 1, 200)
 		if(num > lines.len || num < 1)
 			return
 		lines[num] = content
-		nanomanager.update_uis(src)
+		SSnanoui.update_uis(src)
 
 	else if(href_list["stop"])
 		playing = 0
-		nanomanager.update_uis(src)
+		SSnanoui.update_uis(src)
 
 /datum/song/proc/sanitize_tempo(new_tempo)
 	new_tempo = abs(new_tempo)
@@ -295,8 +295,9 @@
 	QDEL_NULL(song)
 	return ..()
 
-/obj/structure/piano/initialize()
-	song.tempo = song.sanitize_tempo(song.tempo) // tick_lag isn't set when the map is loaded
+/obj/structure/piano/Initialize()
+	if(song)
+		song.tempo = song.sanitize_tempo(song.tempo) // tick_lag isn't set when the map is loaded
 	..()
 
 /obj/structure/piano/attack_hand(mob/user as mob)
@@ -308,31 +309,33 @@
 
 	song.ui_interact(user, ui_key, ui, force_open)
 
-/obj/structure/piano/ui_data(mob/user, ui_key = "main", datum/topic_state/state = default_state)
+/obj/structure/piano/ui_data(mob/user, ui_key = "main", datum/topic_state/state = GLOB.default_state)
 	return song.ui_data(user, ui_key, state)
 
 /obj/structure/piano/Topic(href, href_list)
 	song.Topic(href, href_list)
 
-/obj/structure/piano/attackby(obj/item/O as obj, mob/user as mob, params)
-	if(iswrench(O))
-		if(!anchored && !isinspace())
-			playsound(src.loc, O.usesound, 50, 1)
-			to_chat(user, "<span class='notice'> You begin to tighten \the [src] to the floor...</span>")
-			if(do_after(user, 20 * O.toolspeed, target = src))
-				user.visible_message( \
-					"[user] tightens \the [src]'s casters.", \
-					"<span class='notice'> You have tightened \the [src]'s casters. Now it can be played again.</span>", \
-					"You hear ratchet.")
-				anchored = 1
-		else if(anchored)
-			playsound(src.loc, O.usesound, 50, 1)
-			to_chat(user, "<span class='notice'> You begin to loosen \the [src]'s casters...</span>")
-			if(do_after(user, 40 * O.toolspeed, target = src))
-				user.visible_message( \
-					"[user] loosens \the [src]'s casters.", \
-					"<span class='notice'> You have loosened \the [src]. Now it can be pulled somewhere else.</span>", \
-					"You hear ratchet.")
-				anchored = 0
+/obj/structure/piano/wrench_act(mob/user, obj/item/I)
+	. = TRUE
+	if(!I.tool_use_check(user, 0))
+		return
+	if(!anchored && !isinspace())
+		WRENCH_ANCHOR_MESSAGE
+		if(!I.use_tool(src, user, 20, volume = I.tool_volume))
+			return
+		user.visible_message( \
+			"[user] tightens [src]'s casters.", \
+			"<span class='notice'> You have tightened [src]'s casters. Now it can be played again.</span>", \
+			"You hear ratchet.")
+		anchored = TRUE
+	else if(anchored)
+		to_chat(user, "<span class='notice'> You begin to loosen [src]'s casters...</span>")
+		if(!I.use_tool(src, user, 40, volume = I.tool_volume))
+			return
+		user.visible_message( \
+			"[user] loosens [src]'s casters.", \
+			"<span class='notice'> You have loosened [src]. Now it can be pulled somewhere else.</span>", \
+			"You hear ratchet.")
+		anchored = FALSE
 	else
-		return ..()
+		to_chat(user, "<span class='warning'>[src] needs to be bolted to the floor!</span>")

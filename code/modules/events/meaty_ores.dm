@@ -1,8 +1,8 @@
 /datum/event/dust/meaty/announce()
 	if(prob(16))
-		event_announcement.Announce("Unknown biological entities have been detected near [station_name()], please stand-by.", "Lifesign Alert")
+		GLOB.event_announcement.Announce("Unknown biological entities have been detected near [station_name()], please stand-by.", "Lifesign Alert")
 	else
-		event_announcement.Announce("Meaty ores have been detected on collision course with the station.", "Meaty Ore Alert", new_sound = 'sound/AI/meteors.ogg')
+		GLOB.event_announcement.Announce("Meaty ores have been detected on collision course with the station.", "Meaty Ore Alert", new_sound = 'sound/AI/meteors.ogg')
 
 /datum/event/dust/meaty/setup()
 	qnty = rand(45,125)
@@ -44,7 +44,7 @@
 			if(prob(80))
 				gibs(loc)
 				if(prob(45))
-					new /obj/item/weapon/reagent_containers/food/snacks/meat(loc)
+					new /obj/item/reagent_containers/food/snacks/meat(loc)
 				else if(prob(10))
 					explosion(get_turf(loc), 0, pick(0,1), pick(2,3), 0)
 			else

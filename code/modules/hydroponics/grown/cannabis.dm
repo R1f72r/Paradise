@@ -5,7 +5,7 @@
 	icon_state = "seed-cannabis"
 	species = "cannabis"
 	plantname = "Cannabis Plant"
-	product = /obj/item/weapon/reagent_containers/food/snacks/grown/cannabis
+	product = /obj/item/reagent_containers/food/snacks/grown/cannabis
 	maturation = 8
 	potency = 20
 	growthstages = 1
@@ -17,7 +17,7 @@
 						/obj/item/seeds/cannabis/death,
 						/obj/item/seeds/cannabis/white,
 						/obj/item/seeds/cannabis/ultimate)
-	reagents_add = list("thc" = 0.15)
+	reagents_add = list("thc" = 0.15, "cbd" = 0.15)
 
 
 /obj/item/seeds/cannabis/rainbow
@@ -26,9 +26,9 @@
 	icon_state = "seed-megacannabis"
 	species = "megacannabis"
 	plantname = "Rainbow Weed"
-	product = /obj/item/weapon/reagent_containers/food/snacks/grown/cannabis/rainbow
+	product = /obj/item/reagent_containers/food/snacks/grown/cannabis/rainbow
 	mutatelist = list()
-	reagents_add = list("lsd" = 0.15, "thc" = 0.15)
+	reagents_add = list("lsd" = 0.15, "thc" = 0.15, "cbd" = 0.15)
 	rarity = 40
 
 /obj/item/seeds/cannabis/death
@@ -37,9 +37,9 @@
 	icon_state = "seed-blackcannabis"
 	species = "blackcannabis"
 	plantname = "Deathweed"
-	product = /obj/item/weapon/reagent_containers/food/snacks/grown/cannabis/death
+	product = /obj/item/reagent_containers/food/snacks/grown/cannabis/death
 	mutatelist = list()
-	reagents_add = list("cyanide" = 0.35, "thc" = 0.15)
+	reagents_add = list("cyanide" = 0.35, "thc" = 0.15, "cbd" = 0.15)
 	rarity = 40
 
 /obj/item/seeds/cannabis/white
@@ -48,9 +48,9 @@
 	icon_state = "seed-whitecannabis"
 	species = "whitecannabis"
 	plantname = "Lifeweed"
-	product = /obj/item/weapon/reagent_containers/food/snacks/grown/cannabis/white
+	product = /obj/item/reagent_containers/food/snacks/grown/cannabis/white
 	mutatelist = list()
-	reagents_add = list("omnizine" = 0.35, "thc" = 0.15)
+	reagents_add = list("omnizine" = 0.35, "thc" = 0.15, "cbd" = 0.15)
 	rarity = 40
 
 
@@ -60,7 +60,7 @@
 	icon_state = "seed-ocannabis"
 	species = "ocannabis"
 	plantname = "Omega Weed"
-	product = /obj/item/weapon/reagent_containers/food/snacks/grown/cannabis/ultimate
+	product = /obj/item/reagent_containers/food/snacks/grown/cannabis/ultimate
 	mutatelist = list()
 	reagents_add = list("lsd" = 0.15,
 						"suicider" = 0.15,
@@ -72,6 +72,7 @@
 						"haloperidol" = 0.15,
 						"methamphetamine" = 0.15,
 						"thc" = 0.15,
+						"cbd" = 0.15,
 						"psilocybin" = 0.15,
 						"hairgrownium" = 0.15,
 						"ectoplasm" = 0.15,
@@ -85,7 +86,7 @@
 
 // ---------------------------------------------------------------
 
-/obj/item/weapon/reagent_containers/food/snacks/grown/cannabis
+/obj/item/reagent_containers/food/snacks/grown/cannabis
 	seed = /obj/item/seeds/cannabis
 	icon = 'icons/goonstation/objects/hydroponics.dmi'
 	name = "cannabis leaf"
@@ -93,29 +94,35 @@
 	icon_state = "cannabis"
 	filling_color = "#00FF00"
 	bitesize_mod = 2
+	tastes = list("cannabis" = 1)
+	wine_power = 0.2
 
 
-/obj/item/weapon/reagent_containers/food/snacks/grown/cannabis/rainbow
+/obj/item/reagent_containers/food/snacks/grown/cannabis/rainbow
 	seed = /obj/item/seeds/cannabis/rainbow
 	name = "rainbow cannabis leaf"
 	desc = "Is it supposed to be glowing like that...?"
 	icon_state = "megacannabis"
+	wine_power = 0.6
 
-/obj/item/weapon/reagent_containers/food/snacks/grown/cannabis/death
+/obj/item/reagent_containers/food/snacks/grown/cannabis/death
 	seed = /obj/item/seeds/cannabis/death
 	name = "death cannabis leaf"
 	desc = "Looks a bit dark. Oh well."
 	icon_state = "blackcannabis"
+	wine_power = 0.4
 
-/obj/item/weapon/reagent_containers/food/snacks/grown/cannabis/white
+/obj/item/reagent_containers/food/snacks/grown/cannabis/white
 	seed = /obj/item/seeds/cannabis/white
 	name = "white cannabis leaf"
 	desc = "It feels smooth and nice to the touch."
 	icon_state = "whitecannabis"
+	wine_power = 0.1
 
-/obj/item/weapon/reagent_containers/food/snacks/grown/cannabis/ultimate
+/obj/item/reagent_containers/food/snacks/grown/cannabis/ultimate
 	seed = /obj/item/seeds/cannabis/ultimate
 	name = "omega cannibas leaf"
 	desc = "You feel dizzy looking at it. What the fuck?"
 	icon_state = "ocannabis"
 	volume = 420
+	wine_power = 0.9

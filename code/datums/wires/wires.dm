@@ -5,9 +5,9 @@
 
 #define MAX_FLAG 65535
 
-var/list/same_wires = list()
+GLOBAL_LIST_EMPTY(same_wires)
 // 12 colours, if you're adding more than 12 wires then add more colours here
-var/list/wireColours = list("red", "blue", "green", "black", "orange", "brown", "gold", "gray", "cyan", "navy", "purple", "pink")
+GLOBAL_LIST_INIT(wireColours, list("red", "blue", "green", "black", "orange", "brown", "gold", "gray", "cyan", "navy", "purple", "pink"))
 
 /datum/wires
 
@@ -31,7 +31,6 @@ var/list/wireColours = list("red", "blue", "green", "black", "orange", "brown", 
 	src.holder = holder
 	if(!istype(holder, holder_type))
 		CRASH("Our holder is null/the wrong type!")
-		return
 
 	// Generate new wires
 	if(random)
@@ -39,11 +38,11 @@ var/list/wireColours = list("red", "blue", "green", "black", "orange", "brown", 
 	// Get the same wires
 	else
 		// We don't have any wires to copy yet, generate some and then copy it.
-		if(!same_wires[holder_type])
+		if(!GLOB.same_wires[holder_type])
 			GenerateWires()
-			same_wires[holder_type] = src.wires.Copy()
+			GLOB.same_wires[holder_type] = src.wires.Copy()
 		else
-			var/list/wires = same_wires[holder_type]
+			var/list/wires = GLOB.same_wires[holder_type]
 			src.wires = wires // Reference the wires list.
 
 /datum/wires/Destroy()
@@ -51,7 +50,7 @@ var/list/wireColours = list("red", "blue", "green", "black", "orange", "brown", 
 	return ..()
 
 /datum/wires/proc/GenerateWires()
-	var/list/colours_to_pick = wireColours.Copy() // Get a copy, not a reference.
+	var/list/colours_to_pick = GLOB.wireColours.Copy() // Get a copy, not a reference.
 	var/list/indexes_to_pick = list()
 	//Generate our indexes
 	for(var/i = 1; i < MAX_FLAG && i < (1 << wire_count); i += i)
@@ -76,18 +75,18 @@ var/list/wireColours = list("red", "blue", "green", "black", "orange", "brown", 
 		ui_interact(user)
 
 /datum/wires/ui_interact(mob/user, ui_key = "main", var/datum/nanoui/ui = null, var/force_open = 1)
-	ui = nanomanager.try_update_ui(user, src, ui_key, ui, force_open)
+	ui = SSnanoui.try_update_ui(user, src, ui_key, ui, force_open)
 	if(!ui)
 		ui = new(user, src, ui_key, "wires.tmpl", holder.name, window_x, window_y)
 		ui.open()
 
-/datum/wires/ui_data(mob/user, ui_key = "main", datum/topic_state/state = physical_state)
+/datum/wires/ui_data(mob/user, ui_key = "main", datum/topic_state/state = GLOB.physical_state)
 	var/data[0]
 	var/list/replace_colours = null
 	if(ishuman(user))
 		var/mob/living/carbon/human/H = user
 		var/obj/item/organ/internal/eyes/eyes = H.get_int_organ(/obj/item/organ/internal/eyes)
-		if(eyes && H.disabilities & COLOURBLIND)
+		if(eyes && (COLOURBLIND in H.mutations))
 			replace_colours = eyes.replace_colours
 
 
@@ -131,8 +130,8 @@ var/list/wireColours = list("red", "blue", "green", "black", "orange", "brown", 
 /datum/wires/proc/can_see_wire_index(mob/user)
 	if(user.can_admin_interact())
 		return TRUE
-	else if(istype(user.get_active_hand(), /obj/item/device/multitool))
-		var/obj/item/device/multitool/M = user.get_active_hand()
+	else if(istype(user.get_active_hand(), /obj/item/multitool))
+		var/obj/item/multitool/M = user.get_active_hand()
 		if(M.shows_wire_information)
 			return TRUE
 
@@ -148,14 +147,14 @@ var/list/wireColours = list("red", "blue", "green", "black", "orange", "brown", 
 		holder.add_hiddenprint(L)
 		switch(href_list["action"])
 			if("cut") // Toggles the cut/mend status
-				if(istype(I, /obj/item/weapon/wirecutters) || L.can_admin_interact())
+				if(istype(I, /obj/item/wirecutters) || L.can_admin_interact())
 					if(istype(I))
 						playsound(holder, I.usesound, 20, 1)
 					CutWireColour(colour)
 				else
 					to_chat(L, "<span class='error'>You need wirecutters!</span>")
 			if("pulse")
-				if(istype(I, /obj/item/device/multitool) || L.can_admin_interact())
+				if(istype(I, /obj/item/multitool) || L.can_admin_interact())
 					playsound(holder, 'sound/weapons/empty.ogg', 20, 1)
 					PulseColour(colour)
 				else
@@ -166,7 +165,7 @@ var/list/wireColours = list("red", "blue", "green", "black", "orange", "brown", 
 					if(O)
 						L.put_in_hands(O)
 				else
-					if(istype(I, /obj/item/device/assembly/signaler))
+					if(istype(I, /obj/item/assembly/signaler))
 						if(L.drop_item())
 							Attach(colour, I)
 						else
@@ -174,7 +173,7 @@ var/list/wireColours = list("red", "blue", "green", "black", "orange", "brown", 
 					else
 						to_chat(L, "<span class='error'>You need a remote signaller!</span>")
 
-	nanomanager.update_uis(src)
+	SSnanoui.update_uis(src)
 	return 1
 
 //
@@ -184,12 +183,12 @@ var/list/wireColours = list("red", "blue", "green", "black", "orange", "brown", 
 // Called when wires cut/mended.
 /datum/wires/proc/UpdateCut(index, mended)
 	if(holder)
-		nanomanager.update_uis(holder)
+		SSnanoui.update_uis(holder)
 
 // Called when wire pulsed. Add code here.
 /datum/wires/proc/UpdatePulsed(index)
 	if(holder)
-		nanomanager.update_uis(holder)
+		SSnanoui.update_uis(holder)
 
 /datum/wires/proc/CanUse(mob/L)
 	return 1
@@ -202,20 +201,20 @@ var/list/wireColours = list("red", "blue", "green", "black", "orange", "brown", 
 // Example of use:
 /*
 
-var/const/BOLTED= 1
-var/const/SHOCKED = 2
-var/const/SAFETY = 4
-var/const/POWER = 8
+#define NAME_WIRE_BOLTED 1
+#define NAME_WIRE_SHOCKED 2
+#define NAME_WIRE_SAFETY 4
+#define NAME_WIRE_POWER 8
 
 /datum/wires/door/UpdateCut(var/index, var/mended)
 	var/obj/machinery/door/airlock/A = holder
 	switch(index)
-		if(BOLTED)
+		if(NAME_WIRE_BOLTED)
 		if(!mended)
 			A.bolt()
-	if(SHOCKED)
+	if(NAME_WIRE_SHOCKED)
 		A.shock()
-	if(SAFETY )
+	if(NAME_WIRE_SAFETY)
 		A.safety()
 
 */
@@ -268,7 +267,7 @@ var/const/POWER = 8
 		return signallers[colour]
 	return null
 
-/datum/wires/proc/Attach(colour, obj/item/device/assembly/signaler/S)
+/datum/wires/proc/Attach(colour, obj/item/assembly/signaler/S)
 	if(colour && S)
 		if(!IsAttached(colour))
 			signallers[colour] = S
@@ -278,7 +277,7 @@ var/const/POWER = 8
 
 /datum/wires/proc/Detach(colour)
 	if(colour)
-		var/obj/item/device/assembly/signaler/S = GetAttached(colour)
+		var/obj/item/assembly/signaler/S = GetAttached(colour)
 		if(S)
 			signallers -= colour
 			S.connected = null
@@ -286,7 +285,7 @@ var/const/POWER = 8
 			return S
 
 
-/datum/wires/proc/Pulse(obj/item/device/assembly/signaler/S)
+/datum/wires/proc/Pulse(obj/item/assembly/signaler/S)
 
 	for(var/colour in signallers)
 		if(S == signallers[colour])

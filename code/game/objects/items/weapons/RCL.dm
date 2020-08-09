@@ -1,4 +1,4 @@
-/obj/item/weapon/twohanded/rcl
+/obj/item/twohanded/rcl
 	name = "rapid cable layer (RCL)"
 	desc = "A device used to rapidly deploy cables. It has screws on the side which can be removed to slide off the cables."
 	icon = 'icons/obj/tools.dmi'
@@ -16,7 +16,7 @@
 	var/obj/structure/cable/last = null
 	var/obj/item/stack/cable_coil/loaded = null
 
-/obj/item/weapon/twohanded/rcl/attackby(obj/item/weapon/W, mob/user)
+/obj/item/twohanded/rcl/attackby(obj/item/W, mob/user)
 	if(istype(W, /obj/item/stack/cable_coil))
 		var/obj/item/stack/cable_coil/C = W
 		if(!loaded)
@@ -36,38 +36,42 @@
 				return
 		update_icon()
 		to_chat(user, "<span class='notice'>You add the cables to the [src]. It now contains [loaded.amount].</span>")
-	else if(isscrewdriver(W))
-		if(!loaded)
-			return
-		to_chat(user, "<span class='notice'>You loosen the securing screws on the side, allowing you to lower the guiding edge and retrieve the wires.</span>")
-		while(loaded.amount > 30) //There are only two kinds of situations: "nodiff" (60,90), or "diff" (31-59, 61-89)
-			var/diff = loaded.amount % 30
-			if(diff)
-				loaded.use(diff)
-				new /obj/item/stack/cable_coil(user.loc, diff)
-			else
-				loaded.use(30)
-				new /obj/item/stack/cable_coil(user.loc, 30)
-		loaded.max_amount = initial(loaded.max_amount)
-		loaded.forceMove(user.loc)
-		user.put_in_hands(loaded)
-		loaded = null
-		update_icon()
 	else
 		..()
 
-/obj/item/weapon/twohanded/rcl/examine(mob/user)
-	..()
-	if(loaded)
-		to_chat(user, "<span class='info'>It contains [loaded.amount]/[max_amount] cables.</span>")
+/obj/item/twohanded/rcl/screwdriver_act(mob/user, obj/item/I)
+	if(!loaded)
+		return
+	. = TRUE
+	if(!I.use_tool(src, user, 0, volume = I.tool_volume))
+		return
+	to_chat(user, "<span class='notice'>You loosen the securing screws on the side, allowing you to lower the guiding edge and retrieve the wires.</span>")
+	while(loaded.amount > 30) //There are only two kinds of situations: "nodiff" (60,90), or "diff" (31-59, 61-89)
+		var/diff = loaded.amount % 30
+		if(diff)
+			loaded.use(diff)
+			new /obj/item/stack/cable_coil(user.loc, diff)
+		else
+			loaded.use(30)
+			new /obj/item/stack/cable_coil(user.loc, 30)
+	loaded.max_amount = initial(loaded.max_amount)
+	loaded.forceMove(user.loc)
+	user.put_in_hands(loaded)
+	loaded = null
+	update_icon()
 
-/obj/item/weapon/twohanded/rcl/Destroy()
+/obj/item/twohanded/rcl/examine(mob/user)
+	. = ..()
+	if(loaded)
+		. += "<span class='info'>It contains [loaded.amount]/[max_amount] cables.</span>"
+
+/obj/item/twohanded/rcl/Destroy()
 	QDEL_NULL(loaded)
 	last = null
 	active = 0
 	return ..()
 
-/obj/item/weapon/twohanded/rcl/update_icon()
+/obj/item/twohanded/rcl/update_icon()
 	if(!loaded)
 		icon_state = "rcl-0"
 		item_state = "rcl-0"
@@ -85,8 +89,9 @@
 		else
 			icon_state = "rcl-0"
 			item_state = "rcl-0"
+	..()
 
-/obj/item/weapon/twohanded/rcl/proc/is_empty(mob/user, loud = 1)
+/obj/item/twohanded/rcl/proc/is_empty(mob/user, loud = 1)
 	update_icon()
 	if(!loaded || !loaded.amount)
 		if(loud)
@@ -99,12 +104,12 @@
 		return 1
 	return 0
 
-/obj/item/weapon/twohanded/rcl/dropped(mob/wearer)
+/obj/item/twohanded/rcl/dropped(mob/wearer)
 	..()
 	active = 0
 	last = null
 
-/obj/item/weapon/twohanded/rcl/attack_self(mob/user)
+/obj/item/twohanded/rcl/attack_self(mob/user)
 	..()
 	active = wielded
 	if(!active)
@@ -115,11 +120,11 @@
 				last = C
 				break
 
-/obj/item/weapon/twohanded/rcl/on_mob_move(direct, mob/user)
+/obj/item/twohanded/rcl/on_mob_move(direct, mob/user)
 	if(active)
 		trigger(user)
 
-/obj/item/weapon/twohanded/rcl/proc/trigger(mob/user)
+/obj/item/twohanded/rcl/proc/trigger(mob/user)
 	if(is_empty(user, 0))
 		to_chat(user, "<span class='warning'>\The [src] is empty!</span>")
 		return
@@ -141,7 +146,7 @@
 	last = loaded.place_turf(get_turf(loc), user, turn(user.dir, 180))
 	is_empty(user) //If we've run out, display message
 
-/obj/item/weapon/twohanded/rcl/pre_loaded/New() //Comes preloaded with cable, for testing stuff
+/obj/item/twohanded/rcl/pre_loaded/New() //Comes preloaded with cable, for testing stuff
 	..()
 	loaded = new()
 	loaded.max_amount = max_amount

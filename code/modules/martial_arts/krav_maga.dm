@@ -75,13 +75,14 @@
 	return 0
 
 /datum/martial_art/krav_maga/proc/leg_sweep(var/mob/living/carbon/human/A, var/mob/living/carbon/human/D)
-	if(D.stat || D.weakened)
+	if(D.stat || D.IsWeakened())
 		return 0
 	D.visible_message("<span class='warning'>[A] leg sweeps [D]!</span>", \
 					  	"<span class='userdanger'>[A] leg sweeps you!</span>")
 	playsound(get_turf(A), 'sound/effects/hit_kick.ogg', 50, 1, -1)
 	D.apply_damage(5, BRUTE)
 	D.Weaken(2)
+	add_attack_logs(A, D, "Melee attacked with martial-art [src] :  Leg Sweep", ATKLOG_ALL)
 	return 1
 
 /datum/martial_art/krav_maga/proc/quick_choke(var/mob/living/carbon/human/A, var/mob/living/carbon/human/D)//is actually lung punch
@@ -90,6 +91,7 @@
 	playsound(get_turf(A), 'sound/effects/hit_punch.ogg', 50, 1, -1)
 	D.AdjustLoseBreath(5)
 	D.adjustOxyLoss(10)
+	add_attack_logs(A, D, "Melee attacked with martial-art [src] :  Lung Punch", ATKLOG_ALL)
 	return 1
 
 /datum/martial_art/krav_maga/proc/neck_chop(var/mob/living/carbon/human/A, var/mob/living/carbon/human/D)
@@ -98,6 +100,7 @@
 	playsound(get_turf(A), 'sound/effects/hit_punch.ogg', 50, 1, -1)
 	D.apply_damage(5, BRUTE)
 	D.AdjustSilence(10)
+	add_attack_logs(A, D, "Melee attacked with martial-art [src] :  Neck Chop", ATKLOG_ALL)
 	return 1
 
 datum/martial_art/krav_maga/grab_act(var/mob/living/carbon/human/A, var/mob/living/carbon/human/D)
@@ -108,17 +111,18 @@ datum/martial_art/krav_maga/grab_act(var/mob/living/carbon/human/A, var/mob/livi
 /datum/martial_art/krav_maga/harm_act(var/mob/living/carbon/human/A, var/mob/living/carbon/human/D)
 	if(check_streak(A,D))
 		return 1
-	add_logs(A, D, "punched")
-	A.do_attack_animation(D)
+	add_attack_logs(A, D, "Melee attacked with [src]")
 	var/picked_hit_type = pick("punches", "kicks")
 	var/bonus_damage = 10
-	if(D.weakened || D.resting || D.lying)
+	if(D.IsWeakened() || D.resting || D.lying)
 		bonus_damage += 5
 		picked_hit_type = "stomps on"
 	D.apply_damage(bonus_damage, BRUTE)
 	if(picked_hit_type == "kicks" || picked_hit_type == "stomps")
+		A.do_attack_animation(D, ATTACK_EFFECT_KICK)
 		playsound(get_turf(D), 'sound/effects/hit_kick.ogg', 50, 1, -1)
 	else
+		A.do_attack_animation(D, ATTACK_EFFECT_PUNCH)
 		playsound(get_turf(D), 'sound/effects/hit_punch.ogg', 50, 1, -1)
 	D.visible_message("<span class='danger'>[A] [picked_hit_type] [D]!</span>", \
 					  "<span class='userdanger'>[A] [picked_hit_type] you!</span>")
@@ -131,13 +135,13 @@ datum/martial_art/krav_maga/grab_act(var/mob/living/carbon/human/A, var/mob/livi
 		if(D.hand)
 			if(istype(D.l_hand, /obj/item))
 				var/obj/item/I = D.l_hand
-				D.drop_item()
-				A.put_in_hands(I)
+				if(D.drop_item())
+					A.put_in_hands(I)
 		else
 			if(istype(D.r_hand, /obj/item))
 				var/obj/item/I = D.r_hand
-				D.drop_item()
-				A.put_in_hands(I)
+				if(D.drop_item())
+					A.put_in_hands(I)
 		D.visible_message("<span class='danger'>[A] has disarmed [D]!</span>", \
 							"<span class='userdanger'>[A] has disarmed [D]!</span>")
 		playsound(D, 'sound/weapons/thudswoosh.ogg', 50, 1, -1)
@@ -152,6 +156,7 @@ datum/martial_art/krav_maga/grab_act(var/mob/living/carbon/human/A, var/mob/livi
 /obj/item/clothing/gloves/color/black/krav_maga
 	var/datum/martial_art/krav_maga/style = new
 	can_be_cut = FALSE
+	resistance_flags = NONE
 
 /obj/item/clothing/gloves/color/black/krav_maga/equipped(mob/user, slot)
 	if(!ishuman(user))

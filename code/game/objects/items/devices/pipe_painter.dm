@@ -1,4 +1,4 @@
-/obj/item/device/pipe_painter
+/obj/item/pipe_painter
 	name = "pipe painter"
 	icon = 'icons/obj/bureaucracy.dmi'
 	icon_state = "labeler1"
@@ -6,14 +6,14 @@
 	var/list/modes
 	var/mode
 
-/obj/item/device/pipe_painter/New()
+/obj/item/pipe_painter/New()
 	..()
 	modes = new()
-	for(var/C in pipe_colors)
+	for(var/C in GLOB.pipe_colors)
 		modes += "[C]"
 	mode = pick(modes)
 
-/obj/item/device/pipe_painter/afterattack(atom/A, mob/user as mob)
+/obj/item/pipe_painter/afterattack(atom/A, mob/user as mob)
 	if(!istype(A,/obj/machinery/atmospherics/pipe) || istype(A,/obj/machinery/atmospherics/pipe/simple/heat_exchanging) || istype(A,/obj/machinery/atmospherics/pipe/simple/insulated) || !in_range(user, A))
 		return
 	var/obj/machinery/atmospherics/pipe/P = A
@@ -23,11 +23,11 @@
 		to_chat(user, "<span class='warning'>You must remove the plating first.</span>")
 		return
 
-	P.change_color(pipe_colors[mode])
+	P.change_color(GLOB.pipe_colors[mode])
 
-/obj/item/device/pipe_painter/attack_self(mob/user as mob)
+/obj/item/pipe_painter/attack_self(mob/user as mob)
 	mode = input("Which colour do you want to use?", "Pipe Painter", mode) in modes
 
-/obj/item/device/pipe_painter/examine(mob/user)
-	..(user)
-	to_chat(user, "It is in [mode] mode.")
+/obj/item/pipe_painter/examine(mob/user)
+	. = ..()
+	. += "<span class='notice'>It is in [mode] mode.</span>"

@@ -11,13 +11,13 @@
 	desc = "A Multiple Utility Load Effector bot."
 	icon_state = "mulebot0"
 	density = 1
-	anchored = 1
-	animate_movement=1
+	move_resist = MOVE_FORCE_STRONG
+	animate_movement = 1
 	health = 50
 	maxHealth = 50
 	damage_coeff = list(BRUTE = 0.5, BURN = 0.7, TOX = 0, CLONE = 0, STAMINA = 0, OXY = 0)
 	a_intent = INTENT_HARM //No swapping
-	buckle_lying = 0
+	buckle_lying = FALSE
 	mob_size = MOB_SIZE_LARGE
 	radio_channel = "Supply"
 
@@ -44,11 +44,14 @@
 	var/auto_pickup = 1 	// true if auto-pickup at beacon
 	var/report_delivery = 1 // true if bot will announce an arrival to a location.
 
-	var/obj/item/weapon/stock_parts/cell/cell
+	var/obj/item/stock_parts/cell/cell
 	var/datum/wires/mulebot/wires = null
 	var/bloodiness = 0
 	var/currentBloodColor = "#A10808"
 	var/currentDNA = null
+
+/mob/living/simple_animal/bot/mulebot/get_cell()
+	return cell
 
 /mob/living/simple_animal/bot/mulebot/New()
 	..()
@@ -56,12 +59,11 @@
 	var/datum/job/cargo_tech/J = new/datum/job/cargo_tech
 	access_card.access = J.get_access()
 	prev_access = access_card.access
-	cell = new(src)
-	cell.charge = 2000
-	cell.maxcharge = 2000
+	cell = new /obj/item/stock_parts/cell/upgraded(src)
 
 	mulebot_count++
 	set_suffix(suffix ? suffix : "#[mulebot_count]")
+	RegisterSignal(src, COMSIG_CROSSED_MOVABLE, .proc/human_squish_check)
 
 /mob/living/simple_animal/bot/mulebot/Destroy()
 	unload(0)
@@ -81,28 +83,28 @@
 	reached_target = 0
 
 /mob/living/simple_animal/bot/mulebot/attackby(obj/item/I, mob/user, params)
-	if(istype(I, /obj/item/weapon/screwdriver))
+	if(istype(I, /obj/item/screwdriver))
 		..()
 		if(open)
 			on = FALSE
 		update_controls()
-	else if(istype(I,/obj/item/weapon/stock_parts/cell) && open && !cell)
+	else if(istype(I,/obj/item/stock_parts/cell) && open && !cell)
 		if(!user.drop_item())
 			return
-		var/obj/item/weapon/stock_parts/cell/C = I
+		var/obj/item/stock_parts/cell/C = I
 		C.forceMove(src)
 		cell = C
 		visible_message("[user] inserts a cell into [src].",
 						"<span class='notice'>You insert the new cell into [src].</span>")
 		update_controls()
-	else if(istype(I, /obj/item/weapon/crowbar) && open && cell)
+	else if(istype(I, /obj/item/crowbar) && open && cell)
 		cell.add_fingerprint(usr)
 		cell.forceMove(loc)
 		cell = null
 		visible_message("[user] crowbars out the power cell from [src].",
 						"<span class='notice'>You pry the powercell out of [src].</span>")
 		update_controls()
-	else if(istype(I, /obj/item/weapon/wrench))
+	else if(istype(I, /obj/item/wrench))
 		if(health < maxHealth)
 			adjustBruteLoss(-25)
 			updatehealth()
@@ -112,7 +114,7 @@
 			)
 		else
 			to_chat(user, "<span class='notice'>[src] does not need a repair!</span>")
-	else if((istype(I, /obj/item/device/multitool) || istype(I, /obj/item/weapon/wirecutters)) && open)
+	else if((istype(I, /obj/item/multitool) || istype(I, /obj/item/wirecutters)) && open)
 		return attack_hand(user)
 	else if(load && ismob(load))  // chance to knock off rider
 		if(prob(1 + I.force * 2))
@@ -188,7 +190,7 @@
 			visible_message("[usr] switches [on ? "on" : "off"] [src].")
 		if("cellremove")
 			if(open && cell && !usr.get_active_hand())
-				cell.updateicon()
+				cell.update_icon()
 				usr.put_in_active_hand(cell)
 				cell.add_fingerprint(usr)
 				cell = null
@@ -196,7 +198,7 @@
 				usr.visible_message("<span class='notice'>[usr] removes the power cell from [src].</span>", "<span class='notice'>You remove the power cell from [src].</span>")
 		if("cellinsert")
 			if(open && !cell)
-				var/obj/item/weapon/stock_parts/cell/C = usr.get_active_hand()
+				var/obj/item/stock_parts/cell/C = usr.get_active_hand()
 				if(istype(C))
 					usr.drop_item()
 					cell = C
@@ -214,7 +216,7 @@
 			if(mode == BOT_IDLE || mode == BOT_DELIVER)
 				start_home()
 		if("destination")
-			var/new_dest = input(usr, "Enter Destination:", name, destination) as null|anything in deliverybeacontags
+			var/new_dest = input(usr, "Enter Destination:", name, destination) as null|anything in GLOB.deliverybeacontags
 			if(new_dest)
 				set_destination(new_dest)
 		if("setid")
@@ -222,7 +224,7 @@
 			if(new_id)
 				set_suffix(new_id)
 		if("sethome")
-			var/new_home = input(usr, "Enter Home:", name, home_destination) as null|anything in deliverybeacontags
+			var/new_home = input(usr, "Enter Home:", name, home_destination) as null|anything in GLOB.deliverybeacontags
 			if(new_home)
 				home_destination = new_home
 		if("unload")
@@ -321,13 +323,13 @@
 /mob/living/simple_animal/bot/mulebot/proc/buzz(type)
 	switch(type)
 		if(SIGH)
-			audible_message("[src] makes a sighing buzz.", "<span class='emote'>You hear an electronic buzzing sound.</span>")
+			audible_message("[src] makes a sighing buzz.")
 			playsound(loc, 'sound/machines/buzz-sigh.ogg', 50, 0)
 		if(ANNOYED)
-			audible_message("[src] makes an annoyed buzzing sound.", "<span class='emote'>You hear an electronic buzzing sound.</span>")
+			audible_message("[src] makes an annoyed buzzing sound.")
 			playsound(loc, 'sound/machines/buzz-two.ogg', 50, 0)
 		if(DELIGHT)
-			audible_message("[src] makes a delighted ping!", "<span class='emote'>You hear a ping.</span>")
+			audible_message("[src] makes a delighted ping!")
 			playsound(loc, 'sound/machines/ping.ogg', 50, 0)
 
 
@@ -369,7 +371,7 @@
 
 	if(isobj(AM))
 		var/obj/O = AM
-		if(O.buckled_mob || (locate(/mob) in AM)) //can't load non crates objects with mobs buckled to it or inside it.
+		if(O.has_buckled_mobs() || (locate(/mob) in AM)) //can't load non crates objects with mobs buckled to it or inside it.
 			buzz(SIGH)
 			return
 
@@ -389,21 +391,18 @@
 		passenger = M
 		load = M
 		can_buckle = FALSE
-		// Not sure why this is done
-		reset_perspective(src)
 		return TRUE
 	return FALSE
 
 /mob/living/simple_animal/bot/mulebot/post_buckle_mob(mob/living/M)
-	if(M == buckled_mob) //post buckling
-		M.pixel_y = initial(M.pixel_y) + 9
-		if(M.layer < layer)
-			M.layer = layer + 0.1
+	M.pixel_y = initial(M.pixel_y) + 9
+	if(M.layer < layer)
+		M.layer = layer + 0.01
 
-	else //post unbuckling
-		load = null
-		M.layer = initial(M.layer)
-		M.pixel_y = initial(M.pixel_y)
+/mob/living/simple_animal/bot/mulebot/post_unbuckle_mob(mob/living/M)
+	load = null
+	M.layer = initial(M.layer)
+	M.pixel_y = initial(M.pixel_y)
 
 // called to unload the bot
 // argument is optional direction to unload
@@ -416,15 +415,13 @@
 
 	overlays.Cut()
 
-	if(ismob(load))
-		var/mob/M = load
-		M.reset_perspective(null)
-	unbuckle_mob()
+	unbuckle_all_mobs()
 
 	if(load)
 		load.forceMove(loc)
 		load.pixel_y = initial(load.pixel_y)
 		load.layer = initial(load.layer)
+		load.plane = initial(load.plane)
 		if(dirn)
 			var/turf/T = loc
 			var/turf/newT = get_step(T,dirn)
@@ -443,9 +440,7 @@
 		AM.forceMove(loc)
 		AM.layer = initial(AM.layer)
 		AM.pixel_y = initial(AM.pixel_y)
-		if(ismob(AM))
-			var/mob/M = AM
-			M.reset_perspective(null)
+		AM.plane = initial(AM.plane)
 
 /mob/living/simple_animal/bot/mulebot/call_bot()
 	..()
@@ -606,7 +601,7 @@
 /mob/living/simple_animal/bot/mulebot/proc/at_target()
 	if(!reached_target)
 		radio_channel = "Supply" //Supply channel
-		audible_message("[src] makes a chiming sound!", "<span class='emote'>You hear a chime.</span>")
+		audible_message("[src] makes a chiming sound!")
 		playsound(loc, 'sound/machines/chime.ogg', 50, 0)
 		reached_target = 1
 
@@ -684,7 +679,7 @@
 				visible_message("<span class='danger'>[src] bumps into [M]!</span>")
 			else
 				if(!paicard)
-					add_logs(src, M, "knocked down")
+					add_attack_logs(src, M, "Knocked down")
 					visible_message("<span class='danger'>[src] knocks over [M]!</span>")
 					M.stop_pulling()
 					M.Stun(8)
@@ -692,9 +687,11 @@
 	return ..()
 
 /mob/living/simple_animal/bot/mulebot/proc/RunOver(mob/living/carbon/human/H)
-	add_logs(src, H, "run over", null, "(DAMTYPE: [uppertext(BRUTE)])")
+	if(H.player_logged)//No running over SSD people
+		return
+	add_attack_logs(src, H, "Run over (DAMTYPE: [uppertext(BRUTE)])")
 	H.visible_message("<span class='danger'>[src] drives over [H]!</span>", \
-					"<span class='userdanger'>[src] drives over you!<span>")
+					"<span class='userdanger'>[src] drives over you!</span>")
 	playsound(loc, 'sound/effects/splat.ogg', 50, 1)
 
 	var/damage = rand(5,15)
@@ -706,16 +703,20 @@
 	H.apply_damage(0.5*damage, BRUTE, "r_arm", run_armor_check("r_arm", "melee"))
 
 
-	var/turf/T = get_turf(src)
-	H.add_mob_blood(H)
-	H.add_splatter_floor(T)
 
+
+	if(NO_BLOOD in H.dna.species.species_traits)//Does the run over mob have blood?
+		return//If it doesn't it shouldn't bleed (Though a check should be made eventually for things with liquid in them, like slime people, vox armalis, etc.)
+
+	var/turf/T = get_turf(src)//Where are we?
+	H.add_mob_blood(H)//Cover the victim in their own blood.
+	H.add_splatter_floor(T)//Put the blood where we are.
 	bloodiness += 4
 
 	var/list/blood_dna = H.get_blood_dna_list()
 	if(blood_dna)
 		transfer_blood_dna(blood_dna)
-		currentBloodColor = H.species.blood_color
+		currentBloodColor = H.dna.species.blood_color
 		return
 
 /mob/living/simple_animal/bot/mulebot/bot_control_message(command, mob/user, user_turf)
@@ -805,7 +806,7 @@
 	if(!on || !wires.BeaconRX())
 		return
 
-	for(var/obj/machinery/navbeacon/NB in deliverybeacons)
+	for(var/obj/machinery/navbeacon/NB in GLOB.deliverybeacons)
 		if(NB.location == new_destination)	// if the beacon location matches the set destination
 			destination = new_destination	// the we will navigate there
 			target = NB.loc
@@ -827,7 +828,7 @@
 	visible_message("<span class='userdanger'>[src] blows apart!</span>")
 	var/turf/Tsec = get_turf(src)
 
-	new /obj/item/device/assembly/prox_sensor(Tsec)
+	new /obj/item/assembly/prox_sensor(Tsec)
 	new /obj/item/stack/rods(Tsec)
 	new /obj/item/stack/rods(Tsec)
 	new /obj/item/stack/cable_coil/cut(Tsec)
@@ -836,9 +837,7 @@
 		cell.update_icon()
 		cell = null
 
-	var/datum/effect_system/spark_spread/s = new /datum/effect_system/spark_spread
-	s.set_up(3, 1, src)
-	s.start()
+	do_sparks(3, 1, src)
 
 	new /obj/effect/decal/cleanable/blood/oil(loc)
 	..()
@@ -860,9 +859,14 @@
 	else
 		..()
 
+/mob/living/simple_animal/bot/mulebot/proc/human_squish_check(src, atom/movable/AM)
+	if(!ishuman(AM))
+		return
+	RunOver(AM)
+
 #undef SIGH
 #undef ANNOYED
 #undef DELIGHT
 
 /obj/machinery/bot_core/mulebot
-	req_access = list(access_cargo)
+	req_access = list(ACCESS_CARGO)

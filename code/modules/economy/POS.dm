@@ -11,10 +11,10 @@
 	var/price = 0 // Per unit
 	var/units = 0
 
-var/global/current_pos_id = 1
-var/global/pos_sales = 0
+GLOBAL_VAR_INIT(current_pos_id, 1)
+GLOBAL_VAR_INIT(pos_sales, 0)
 
-var/const/RECEIPT_HEADER = {"<html>
+#define RECEIPT_HEADER {"<html>
 	<head>
 		<style type="text/css">
 			html {
@@ -61,7 +61,7 @@ var/const/RECEIPT_HEADER = {"<html>
 	</head>
 	<body>
 "}
-var/const/POS_HEADER = {"<html>
+#define POS_HEADER {"<html>
 	<head>
 		<style type="text/css">
 			* {
@@ -142,11 +142,11 @@ var/const/POS_HEADER = {"<html>
 
 /obj/machinery/pos/New()
 	..()
-	id = current_pos_id++
+	id = GLOB.current_pos_id++
 	if(department)
-		linked_account = department_accounts[department]
+		linked_account = GLOB.department_accounts[department]
 	else
-		linked_account = station_account
+		linked_account = GLOB.station_account
 	update_icon()
 
 /obj/machinery/pos/proc/AddToOrder(var/name, var/units)
@@ -173,7 +173,7 @@ var/const/POS_HEADER = {"<html>
 		receipt += myArea.name
 	receipt += "</div>"
 	receipt += {"<br />
-		<div>[worldtime2text()], [current_date_string]</div>
+		<div>[station_time_timestamp()], [GLOB.current_date_string]</div>
 		<table>
 			<tr class=\"first\">
 				<th class=\"first\">Item</th>
@@ -202,7 +202,7 @@ var/const/POS_HEADER = {"<html>
 	receipt += "</table></body></html>"
 
 	playsound(loc, 'sound/goonstation/machines/printer_thermal.ogg', 50, 1)
-	var/obj/item/weapon/paper/P = new(loc)
+	var/obj/item/paper/P = new(loc)
 	P.name="Receipt #[id]-[++sales]"
 	P.info=receipt
 
@@ -369,7 +369,7 @@ var/const/POS_HEADER = {"<html>
 		logindata={"<a href="?src=[UID()];logout=1">[logged_in.name]</a>"}
 	var/dat = POS_HEADER + {"
 	<div class="navbar">
-		[worldtime2text()], [current_date_string]<br />
+		[station_time_timestamp()], [GLOB.current_date_string]<br />
 		[logindata]
 		<a href="?src=[UID()];screen=[POS_SCREEN_ORDER]">Order</a> |
 		<a href="?src=[UID()];screen=[POS_SCREEN_PRODUCTS]">Products</a> |
@@ -479,8 +479,8 @@ var/const/POS_HEADER = {"<html>
 	src.attack_hand(usr)
 
 /obj/machinery/pos/attackby(var/atom/movable/A, var/mob/user, params)
-	if(istype(A,/obj/item/weapon/card/id))
-		var/obj/item/weapon/card/id/I = A
+	if(istype(A,/obj/item/card/id))
+		var/obj/item/card/id/I = A
 		if(!logged_in)
 			user.visible_message("<span class='notice'>The machine beeps, and logs you in</span>","You hear a beep.")
 			logged_in = user
@@ -533,4 +533,5 @@ var/const/POS_HEADER = {"<html>
 			if(credits_held)
 				new /obj/item/stack/spacecash(loc, credits_held)
 			credits_held=0
-	..()
+		return
+	return ..()

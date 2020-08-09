@@ -4,7 +4,7 @@
 	program_icon_state = "power_monitor"
 	extended_desc = "This program connects to sensors around the station to provide information about electrical systems"
 	ui_header = "power_norm.gif"
-	transfer_access = access_engine
+	transfer_access = ACCESS_ENGINE
 	usage_flags = PROGRAM_CONSOLE
 	requires_ntnet = 0
 	network_destination = "power monitoring system"
@@ -24,7 +24,7 @@
 	attached = locate() in T
 
 /datum/computer_file/program/power_monitor/ui_interact(mob/user, ui_key = "main", var/datum/nanoui/ui = null, var/force_open = 1)
-	ui = nanomanager.try_update_ui(user, src, ui_key, ui, force_open)
+	ui = SSnanoui.try_update_ui(user, src, ui_key, ui, force_open)
 	if(!ui)
 		var/datum/asset/assets = get_asset_datum(/datum/asset/simple/headers)
 		assets.send(user)
@@ -39,10 +39,10 @@
 	data["powermonitor"] = attached ? TRUE : FALSE
 
 	if(attached)
-		var/datum/powernet/powernet = attached.get_powernet()
+		var/datum/powernet/powernet = attached.powernet
 		data["poweravail"] = powernet.avail
 		data["powerload"] = powernet.viewload
 		data["powerdemand"] = powernet.load
-		data["apcs"] = apc_repository.apc_data(powernet)
+		data["apcs"] = GLOB.apc_repository.apc_data(powernet)
 
 	return data

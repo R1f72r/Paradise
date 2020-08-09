@@ -89,12 +89,12 @@
 				if(ATM_P)
 					filtered_out.toxins = removed.toxins
 					removed.toxins = 0
+
+					filtered_out.agent_b = removed.agent_b
+					removed.agent_b = 0
 				if(ATM_N2O)
-					if(removed.trace_gases.len>0)
-						for(var/datum/gas/sleeping_agent/trace_gas in removed.trace_gases)
-							if(istype(trace_gas))
-								removed.trace_gases -= trace_gas
-								filtered_out.trace_gases += trace_gas
+					filtered_out.sleeping_agent = removed.sleeping_agent
+					removed.sleeping_agent = 0
 				else
 					filtered_out = null
 
@@ -112,7 +112,7 @@
 /obj/machinery/atmospherics/omni/filter/ui_interact(mob/user, ui_key = "main", var/datum/nanoui/ui = null, force_open = 0)
 	usr.set_machine(src)
 
-	ui = nanomanager.try_update_ui(user, src, ui_key, ui, force_open)
+	ui = SSnanoui.try_update_ui(user, src, ui_key, ui, force_open)
 	if(!ui)
 		ui = new(user, src, ui_key, "omni_filter.tmpl", "Omni Filter Control", 330, 330)
 		ui.open()
@@ -197,7 +197,7 @@
 				switch_filter(dir_flag(href_list["dir"]), mode_return_switch(new_filter))
 
 	update_icon()
-	nanomanager.update_uis(src)
+	SSnanoui.update_uis(src)
 	return
 
 /obj/machinery/atmospherics/omni/filter/proc/mode_return_switch(var/mode)

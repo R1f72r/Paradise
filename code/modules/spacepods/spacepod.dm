@@ -1,11 +1,11 @@
 #define DAMAGE			1
 #define FIRE			2
-#define LIGHT			1
+#define POD_LIGHT		1
 #define WINDOW			2
 #define RIM	    		3
 #define PAINT			4
 
-/obj/item/weapon/pod_paint_bucket
+/obj/item/pod_paint_bucket
 	name = "space pod paintkit"
 	desc = "Pimp your ride"
 	icon = 'icons/obj/items.dmi'
@@ -19,26 +19,24 @@
 	opacity = 0
 
 	anchored = 1
-	unacidable = 1
+	resistance_flags = ACID_PROOF
 
 	layer = 3.9
 	infra_luminosity = 15
 
-	var/list/mob/pilot	//There is only ever one pilot and he gets all the privledge
+	var/mob/pilot	//There is only ever one pilot and he gets all the privledge
 	var/list/mob/passengers = list() //passengers can't do anything and are variable in number
 	var/max_passengers = 0
-	var/obj/item/weapon/storage/internal/cargo_hold
+	var/obj/item/storage/internal/cargo_hold
 
 	var/datum/spacepod/equipment/equipment_system
 
-	var/battery_type = "/obj/item/weapon/stock_parts/cell/high"
-	var/obj/item/weapon/stock_parts/cell/battery
+	var/battery_type = "/obj/item/stock_parts/cell/high"
+	var/obj/item/stock_parts/cell/battery
 
 	var/datum/gas_mixture/cabin_air
 	var/obj/machinery/portable_atmospherics/canister/internal_tank
 	var/use_internal_tank = 0
-	var/datum/global_iterator/pr_int_temp_processor //normalizes internal air mixture temperature
-	var/datum/global_iterator/pr_give_air //moves air from tank to cabin
 
 	var/datum/effect_system/trail_follow/ion/space_trail/ion_trail
 
@@ -67,13 +65,18 @@
 
 	var/move_delay = 2
 	var/next_move = 0
+	var/can_paint = TRUE
 
 /obj/spacepod/proc/apply_paint(mob/user as mob)
 	var/part_type
+	if(!can_paint)
+		to_chat(user, "<span class='warning'>You can't repaint this type of pod!</span>")
+		return
+
 	var/part = input(user, "Choose part", null) as null|anything in list("Lights","Rim","Paint","Windows")
 	switch(part)
 		if("Lights")
-			part_type = LIGHT
+			part_type = POD_LIGHT
 		if("Rim")
 			part_type = RIM
 		if("Paint")
@@ -87,6 +90,8 @@
 		has_paint = 1
 	update_icons()
 
+/obj/spacepod/get_cell()
+	return battery
 
 /obj/spacepod/New()
 	. = ..()
@@ -96,7 +101,7 @@
 		pod_overlays[FIRE] = image(icon, icon_state="pod_fire")
 	if(!pod_paint_effect)
 		pod_paint_effect = new/list(4)
-		pod_paint_effect[LIGHT] = image(icon,icon_state = "LIGHTS")
+		pod_paint_effect[POD_LIGHT] = image(icon,icon_state = "LIGHTS")
 		pod_paint_effect[WINDOW] = image(icon,icon_state = "Windows")
 		pod_paint_effect[RIM] = image(icon,icon_state = "RIM")
 		pod_paint_effect[PAINT] = image(icon,icon_state = "PAINT")
@@ -110,16 +115,15 @@
 	src.ion_trail.set_up(src)
 	src.ion_trail.start()
 	src.use_internal_tank = 1
-	pr_int_temp_processor = new /datum/global_iterator/pod_preserve_temp(list(src))
-	pr_give_air = new /datum/global_iterator/pod_tank_give_air(list(src))
 	equipment_system = new(src)
 	equipment_system.installed_modules += battery
-	spacepods_list += src
-	cargo_hold = new/obj/item/weapon/storage/internal(src)
+	GLOB.spacepods_list += src
+	cargo_hold = new/obj/item/storage/internal(src)
 	cargo_hold.w_class = 5	//so you can put bags in
 	cargo_hold.storage_slots = 0	//You need to install cargo modules to use it.
 	cargo_hold.max_w_class = 5		//fit almost anything
 	cargo_hold.max_combined_w_class = 0 //you can optimize your stash with larger items
+	START_PROCESSING(SSobj, src)
 
 /obj/spacepod/Destroy()
 	if(equipment_system.cargo_system)
@@ -129,8 +133,6 @@
 	QDEL_NULL(battery)
 	QDEL_NULL(cabin_air)
 	QDEL_NULL(internal_tank)
-	QDEL_NULL(pr_int_temp_processor)
-	QDEL_NULL(pr_give_air)
 	QDEL_NULL(ion_trail)
 	occupant_sanity_check()
 	if(pilot)
@@ -140,14 +142,15 @@
 		for(var/mob/M in passengers)
 			M.forceMove(get_turf(src))
 			passengers -= M
-	spacepods_list -= src
+	GLOB.spacepods_list -= src
+	STOP_PROCESSING(SSobj, src)
 	return ..()
 
 /obj/spacepod/process()
+	give_air()
+	regulate_temp()
 	if(src.empcounter > 0)
 		src.empcounter--
-	else
-		processing_objects.Remove(src)
 
 /obj/spacepod/proc/update_icons()
 	if(!pod_overlays)
@@ -157,7 +160,7 @@
 
 	if(!pod_paint_effect)
 		pod_paint_effect = new/list(4)
-		pod_paint_effect[LIGHT] = image(icon,icon_state = "LIGHTS")
+		pod_paint_effect[POD_LIGHT] = image(icon,icon_state = "LIGHTS")
 		pod_paint_effect[WINDOW] = image(icon,icon_state = "Windows")
 		pod_paint_effect[RIM] = image(icon,icon_state = "RIM")
 		pod_paint_effect[PAINT] = image(icon,icon_state = "PAINT")
@@ -165,9 +168,9 @@
 
 	if(has_paint)
 		var/image/to_add
-		if(!isnull(pod_paint_effect[LIGHT]))
-			to_add = pod_paint_effect[LIGHT]
-			to_add.color = colors[LIGHT]
+		if(!isnull(pod_paint_effect[POD_LIGHT]))
+			to_add = pod_paint_effect[POD_LIGHT]
+			to_add.color = colors[POD_LIGHT]
 			overlays += to_add
 		if(!isnull(pod_paint_effect[WINDOW]))
 			to_add = pod_paint_effect[WINDOW]
@@ -194,27 +197,30 @@
 		deal_damage(P.damage)
 	P.on_hit(src)
 
-/obj/spacepod/blob_act()
-	deal_damage(30)
-	return
+/obj/spacepod/AllowDrop()
+	return TRUE
 
-/obj/spacepod/attack_animal(mob/living/simple_animal/user as mob)
-	if(user.melee_damage_upper == 0)
-		user.custom_emote(1, "[user.friendly] [src]")
+/obj/spacepod/blob_act(obj/structure/blob/B)
+	deal_damage(30)
+
+/obj/spacepod/attack_animal(mob/living/simple_animal/user)
+	if((user.a_intent == INTENT_HELP && user.ckey) || user.melee_damage_upper == 0)
+		user.custom_emote(1, "[user.friendly] [src].")
+		return FALSE
 	else
 		var/damage = rand(user.melee_damage_lower, user.melee_damage_upper)
 		deal_damage(damage)
 		visible_message("<span class='danger'>[user]</span> [user.attacktext] [src]!")
 		user.create_attack_log("<font color='red'>attacked [src.name]</font>")
-	return
+		add_attack_logs(user, src, "attacked")
+		return TRUE
 
-/obj/spacepod/attack_alien(mob/user as mob)
+/obj/spacepod/attack_alien(mob/user)
 	user.changeNext_move(CLICK_CD_MELEE)
 	deal_damage(15)
 	playsound(src.loc, 'sound/weapons/slash.ogg', 50, 1, -1)
 	to_chat(user, "<span class='warning'>You slash at [src]!</span>")
 	visible_message("<span class='warning'>The [user] slashes at [src.name]'s armor!</span>")
-	return
 
 /obj/spacepod/proc/deal_damage(var/damage)
 	var/oldhealth = health
@@ -228,12 +234,19 @@
 	if(!health)
 		spawn(0)
 			message_to_riders("<span class='userdanger'>Critical damage to the vessel detected, core explosion imminent!</span>")
-			for(var/i = 10, i >= 0; --i)
-				message_to_riders("<span class='warning'>[i]</span>")
-				if(i == 0)
-					explosion(loc, 2, 4, 8)
-					qdel(src)
+			for(var/i in 1 to 3)
+				var/count = 3
+				message_to_riders("<span class='warning'>[count]</span>")
+				count--
 				sleep(10)
+			if(LAZYLEN(pilot) || LAZYLEN(passengers))
+				for(var/M in passengers + pilot)
+					var/mob/living/L = M
+					L.adjustBruteLoss(300)
+			explosion(loc, 0, 0, 2)
+			robogibs(loc)
+			robogibs(loc)
+			qdel(src)
 
 	update_icons()
 
@@ -271,7 +284,6 @@
 	deal_damage(80 / severity)
 	if(empcounter < (40 / severity))
 		empcounter = 40 / severity
-	processing_objects.Add(src)
 
 	switch(severity)
 		if(1)
@@ -296,106 +308,109 @@
 		to_chat(M, mymessage)
 
 /obj/spacepod/attackby(obj/item/W as obj, mob/user as mob, params)
-	if(user.a_intent == INTENT_HARM)
-		..()
-		deal_damage(W.force)
-	else
-		if(iscrowbar(W))
-			if(!equipment_system.lock_system || unlocked || hatch_open)
-				hatch_open = !hatch_open
-				playsound(loc, W.usesound, 50, 1)
-				to_chat(user, "<span class='notice'>You [hatch_open ? "open" : "close"] the maintenance hatch.</span>")
-			else
-				to_chat(user, "<span class='warning'>The hatch is locked shut!</span>")
+	if(istype(W, /obj/item/stock_parts/cell))
+		if(!hatch_open)
+			to_chat(user, "<span class='warning'>The maintenance hatch is closed!</span>")
 			return
-		if(istype(W, /obj/item/weapon/stock_parts/cell))
-			if(!hatch_open)
-				to_chat(user, "<span class='warning'>The maintenance hatch is closed!</span>")
-				return
-			if(battery)
-				to_chat(user, "<span class='notice'>The pod already has a battery.</span>")
-				return
-			to_chat(user, "<span class='notice'>You insert [W] into the pod.</span>")
-			user.drop_item(W)
-			battery = W
-			W.forceMove(src)
+		if(battery)
+			to_chat(user, "<span class='notice'>The pod already has a battery.</span>")
 			return
-		if(istype(W, /obj/item/device/spacepod_equipment))
-			if(!hatch_open)
-				to_chat(user, "<span class='warning'>The maintenance hatch is closed!</span>")
-				return
-			if(!equipment_system)
-				to_chat(user, "<span class='warning'>The pod has no equipment datum, yell at the coders</span>")
-				return
-			if(istype(W, /obj/item/device/spacepod_equipment/weaponry))
-				add_equipment(user, W, "weapon_system")
-				return
-			if(istype(W, /obj/item/device/spacepod_equipment/misc))
-				add_equipment(user, W, "misc_system")
-				return
-			if(istype(W, /obj/item/device/spacepod_equipment/cargo))
-				add_equipment(user, W, "cargo_system")
-				return
-			if(istype(W, /obj/item/device/spacepod_equipment/sec_cargo))
-				add_equipment(user, W, "sec_cargo_system")
-				return
-			if(istype(W, /obj/item/device/spacepod_equipment/lock))
-				add_equipment(user, W, "lock_system")
-				return
-
-		if(istype(W, /obj/item/device/spacepod_key) && istype(equipment_system.lock_system, /obj/item/device/spacepod_equipment/lock/keyed))
-			var/obj/item/device/spacepod_key/key = W
-			if(key.id == equipment_system.lock_system.id)
-				lock_pod()
-				return
-			else
-				to_chat(user, "<span class='warning'>This is the wrong key!</span>")
-				return
-
-		if(istype(W, /obj/item/weapon/weldingtool))
-			if(!hatch_open)
-				to_chat(user, "<span class='warning'>You must open the maintenance hatch before attempting repairs.</span>")
-				return
-			var/obj/item/weapon/weldingtool/WT = W
-			if(!WT.isOn())
-				to_chat(user, "<span class='warning'>The welder must be on for this task.</span>")
-				return
-			if(health < initial(health))
-				to_chat(user, "<span class='notice'>You start welding the spacepod...</span>")
-				playsound(loc, W.usesound, 50, 1)
-				if(do_after(user, 20 * W.toolspeed, target = src))
-					if(!src || !WT.remove_fuel(3, user)) return
-					repair_damage(10)
-					to_chat(user, "<span class='notice'>You mend some [pick("dents","bumps","damage")] with [WT]</span>")
-				return
-			to_chat(user, "<span class='boldnotice'>[src] is fully repaired!</span>")
+		to_chat(user, "<span class='notice'>You insert [W] into the pod.</span>")
+		user.drop_item(W)
+		battery = W
+		W.forceMove(src)
+		return
+	else if(istype(W, /obj/item/spacepod_equipment))
+		if(!hatch_open)
+			to_chat(user, "<span class='warning'>The maintenance hatch is closed!</span>")
+			return
+		if(!equipment_system)
+			to_chat(user, "<span class='warning'>The pod has no equipment datum, yell at the coders</span>")
+			return
+		if(istype(W, /obj/item/spacepod_equipment/weaponry))
+			add_equipment(user, W, "weapon_system")
+			return
+		if(istype(W, /obj/item/spacepod_equipment/misc))
+			add_equipment(user, W, "misc_system")
+			return
+		if(istype(W, /obj/item/spacepod_equipment/cargo))
+			add_equipment(user, W, "cargo_system")
+			return
+		if(istype(W, /obj/item/spacepod_equipment/sec_cargo))
+			add_equipment(user, W, "sec_cargo_system")
+			return
+		if(istype(W, /obj/item/spacepod_equipment/lock))
+			add_equipment(user, W, "lock_system")
 			return
 
-		if(istype(W, /obj/item/device/lock_buster))
-			var/obj/item/device/lock_buster/L = W
-			if(L.on && equipment_system.lock_system)
-				user.visible_message(user, "<span class='warning'>[user] is drilling through the [src]'s lock!</span>",
-					"<span class='notice'>You start drilling through the [src]'s lock!</span>")
-				if(do_after(user, 100 * W.toolspeed, target = src))
-					QDEL_NULL(equipment_system.lock_system)
-					unlocked = TRUE
-					user.visible_message(user, "<span class='warning'>[user] has destroyed the [src]'s lock!</span>",
-						"<span class='notice'>You destroy the [src]'s lock!</span>")
-				else
-					user.visible_message(user, "<span class='warning'>[user] fails to break through the [src]'s lock!</span>",
-					"<span class='notice'>You were unable to break through the [src]'s lock!</span>")
-				return
-			if(L.on && unlocked == FALSE) //The buster is on, we don't have a lock system, and the pod is still somehow locked, unlocking.
+	else if(istype(W, /obj/item/spacepod_key) && istype(equipment_system.lock_system, /obj/item/spacepod_equipment/lock/keyed))
+		var/obj/item/spacepod_key/key = W
+		if(key.id == equipment_system.lock_system.id)
+			lock_pod()
+			return
+		else
+			to_chat(user, "<span class='warning'>This is the wrong key!</span>")
+			return
+
+	else if(istype(W, /obj/item/lock_buster))
+		var/obj/item/lock_buster/L = W
+		if(L.on && equipment_system.lock_system)
+			user.visible_message(user, "<span class='warning'>[user] is drilling through the [src]'s lock!</span>",
+				"<span class='notice'>You start drilling through the [src]'s lock!</span>")
+			if(do_after(user, 100 * W.toolspeed, target = src))
+				QDEL_NULL(equipment_system.lock_system)
 				unlocked = TRUE
-				user.visible_message(user, "<span class='notice'>[user] repairs [src]'s doors with [L].</span>",
-					"<span class='notice'>You repair [src]'s doors with [L].</span>")
-			to_chat(user, "<span class='notice'>Turn the [L] on first.</span>")
+				user.visible_message(user, "<span class='warning'>[user] has destroyed the [src]'s lock!</span>",
+					"<span class='notice'>You destroy the [src]'s lock!</span>")
+			else
+				user.visible_message(user, "<span class='warning'>[user] fails to break through the [src]'s lock!</span>",
+				"<span class='notice'>You were unable to break through the [src]'s lock!</span>")
 			return
+		if(L.on && unlocked == FALSE) //The buster is on, we don't have a lock system, and the pod is still somehow locked, unlocking.
+			unlocked = TRUE
+			user.visible_message(user, "<span class='notice'>[user] repairs [src]'s doors with [L].</span>",
+				"<span class='notice'>You repair [src]'s doors with [L].</span>")
+		to_chat(user, "<span class='notice'>Turn the [L] on first.</span>")
+		return
 
-		if(cargo_hold.storage_slots > 0 && !hatch_open && unlocked) // must be the last option as all items not listed prior will be stored
-			cargo_hold.attackby(W, user, params)
+	else if(cargo_hold.storage_slots > 0 && !hatch_open && unlocked) // must be the last option as all items not listed prior will be stored
+		cargo_hold.attackby(W, user, params)
+	else
+		if(user.a_intent == INTENT_HARM)
+			deal_damage(W.force)
+		return ..()
 
-obj/spacepod/proc/add_equipment(mob/user, var/obj/item/device/spacepod_equipment/SPE, var/slot)
+/obj/spacepod/crowbar_act(mob/user, obj/item/I)
+	if(user.a_intent == INTENT_HARM)
+		return
+	. = TRUE
+	if(!I.use_tool(src, user, 0, volume = I.tool_volume))
+		return
+	if(!equipment_system.lock_system || unlocked || hatch_open)
+		hatch_open = !hatch_open
+		to_chat(user, "<span class='notice'>You [hatch_open ? "open" : "close"] the maintenance hatch.</span>")
+	else
+		to_chat(user, "<span class='warning'>The hatch is locked shut!</span>")
+
+/obj/spacepod/welder_act(mob/user, obj/item/I)
+	if(user.a_intent == INTENT_HARM)
+		return
+	. = TRUE
+	if(!hatch_open)
+		to_chat(user, "<span class='warning'>You must open the maintenance hatch before attempting repairs.</span>")
+		return
+	if(health >= initial(health))
+		to_chat(user, "<span class='boldnotice'>[src] is fully repaired!</span>")
+		return
+	if(!I.tool_use_check(user, 0))
+		return
+	to_chat(user, "<span class='notice'>You start welding the spacepod...</span>")
+	if(I.use_tool(src, user, 20, 3, volume = I.tool_volume))
+		repair_damage(10)
+		to_chat(user, "<span class='notice'>You mend some [pick("dents","bumps","damage")] with [I]</span>")
+
+
+/obj/spacepod/proc/add_equipment(mob/user, var/obj/item/spacepod_equipment/SPE, var/slot)
 	if(equipment_system.vars[slot])
 		to_chat(user, "<span class='notice'>The pod already has a [slot], remove it first.</span>")
 		return
@@ -404,7 +419,7 @@ obj/spacepod/proc/add_equipment(mob/user, var/obj/item/device/spacepod_equipment
 		user.drop_item(SPE)
 		SPE.forceMove(src)
 		equipment_system.vars[slot] = SPE
-		var/obj/item/device/spacepod_equipment/system = equipment_system.vars[slot]
+		var/obj/item/spacepod_equipment/system = equipment_system.vars[slot]
 		system.my_atom = src
 		equipment_system.installed_modules += SPE
 		max_passengers += SPE.occupant_mod
@@ -481,7 +496,7 @@ obj/spacepod/proc/add_equipment(mob/user, var/obj/item/device/spacepod_equipment
 		if("Lock System")
 			remove_equipment(user, equipment_system.lock_system, "lock_system")
 
-/obj/spacepod/proc/remove_equipment(mob/user, var/obj/item/device/spacepod_equipment/SPE, var/slot)
+/obj/spacepod/proc/remove_equipment(mob/user, var/obj/item/spacepod_equipment/SPE, var/slot)
 
 	if(passengers.len > max_passengers - SPE.occupant_mod)
 		to_chat(user, "<span class='warning'>Someone is sitting in [SPE]!</span>")
@@ -507,8 +522,8 @@ obj/spacepod/proc/add_equipment(mob/user, var/obj/item/device/spacepod_equipment
 	to_chat(user, "<span class='warning'>You need an open hand to do that.</span>")
 
 
-/obj/spacepod/hear_talk/hear_talk(mob/M, var/msg)
-	cargo_hold.hear_talk(M, msg)
+/obj/spacepod/hear_talk/hear_talk(mob/M, list/message_pieces)
+	cargo_hold.hear_talk(M, message_pieces)
 	..()
 
 /obj/spacepod/hear_message(mob/M, var/msg)
@@ -521,12 +536,12 @@ obj/spacepod/proc/add_equipment(mob/user, var/obj/item/device/spacepod_equipment
 
 	L += src.contents
 
-	for(var/obj/item/weapon/storage/S in src)
+	for(var/obj/item/storage/S in src)
 		L += S.return_inv()
-	for(var/obj/item/weapon/gift/G in src)
+	for(var/obj/item/gift/G in src)
 		L += G.gift
-		if(istype(G.gift, /obj/item/weapon/storage))
-			var/obj/item/weapon/storage/inv = G.gift
+		if(istype(G.gift, /obj/item/storage))
+			var/obj/item/storage/inv = G.gift
 			L += inv.return_inv()
 	return L
 
@@ -536,7 +551,7 @@ obj/spacepod/proc/add_equipment(mob/user, var/obj/item/device/spacepod_equipment
 
 /obj/spacepod/civilian/attackby(obj/item/W as obj, mob/user as mob, params)
 	..()
-	if(istype(W, /obj/item/weapon/pod_paint_bucket))
+	if(istype(W, /obj/item/pod_paint_bucket))
 		apply_paint(user)
 		return
 
@@ -552,31 +567,34 @@ obj/spacepod/proc/add_equipment(mob/user, var/obj/item/device/spacepod_equipment
 
 /obj/spacepod/syndi
 	name = "syndicate spacepod"
-	desc = "An armed spacepod painted in syndicate colors."
+	desc = "A spacepod painted in syndicate colors."
 	icon_state = "pod_synd"
 	health = 400
 	unlocked = FALSE
 
+/obj/spacepod/syndi/unlocked
+	unlocked = TRUE
+
 /obj/spacepod/sec/New()
 	..()
-	var/obj/item/device/spacepod_equipment/weaponry/burst_taser/T = new /obj/item/device/spacepod_equipment/weaponry/taser
+	var/obj/item/spacepod_equipment/weaponry/burst_taser/T = new /obj/item/spacepod_equipment/weaponry/taser
 	T.loc = equipment_system
 	equipment_system.weapon_system = T
 	equipment_system.weapon_system.my_atom = src
 	equipment_system.installed_modules += T
-	var/obj/item/device/spacepod_equipment/misc/tracker/L = new /obj/item/device/spacepod_equipment/misc/tracker
+	var/obj/item/spacepod_equipment/misc/tracker/L = new /obj/item/spacepod_equipment/misc/tracker
 	L.loc = equipment_system
 	equipment_system.misc_system = L
 	equipment_system.misc_system.my_atom = src
 	equipment_system.misc_system.enabled = 1
 	equipment_system.installed_modules += L
-	var/obj/item/device/spacepod_equipment/sec_cargo/chair/C = new /obj/item/device/spacepod_equipment/sec_cargo/chair
+	var/obj/item/spacepod_equipment/sec_cargo/chair/C = new /obj/item/spacepod_equipment/sec_cargo/chair
 	C.loc = equipment_system
 	equipment_system.sec_cargo_system = C
 	equipment_system.sec_cargo_system.my_atom = src
 	equipment_system.installed_modules += C
 	max_passengers = 1
-	var/obj/item/device/spacepod_equipment/lock/keyed/K = new /obj/item/device/spacepod_equipment/lock/keyed
+	var/obj/item/spacepod_equipment/lock/keyed/K = new /obj/item/spacepod_equipment/lock/keyed
 	K.loc = equipment_system
 	equipment_system.lock_system = K
 	equipment_system.lock_system.my_atom = src
@@ -675,7 +693,7 @@ obj/spacepod/proc/add_equipment(mob/user, var/obj/item/device/spacepod_equipment
 		return 1
 
 /obj/spacepod/MouseDrop_T(atom/A, mob/user)
-	if(user == pilot || user in passengers)
+	if(user == pilot || (user in passengers))
 		return
 
 	if(istype(A,/mob))
@@ -699,15 +717,15 @@ obj/spacepod/proc/add_equipment(mob/user, var/obj/item/device/spacepod_equipment
 			enter_pod(user)
 			return
 
-	if(istype(A, /obj/structure/ore_box) && equipment_system.cargo_system && istype(equipment_system.cargo_system,/obj/item/device/spacepod_equipment/cargo/ore)) // For loading ore boxes
+	if(istype(A, /obj/structure/ore_box) && equipment_system.cargo_system && istype(equipment_system.cargo_system,/obj/item/spacepod_equipment/cargo/ore)) // For loading ore boxes
 		load_cargo(user, A)
 		return
 
-	if(istype(A, /obj/structure/closet/crate) && equipment_system.cargo_system && istype(equipment_system.cargo_system, /obj/item/device/spacepod_equipment/cargo/crate)) // For loading crates
+	if(istype(A, /obj/structure/closet/crate) && equipment_system.cargo_system && istype(equipment_system.cargo_system, /obj/item/spacepod_equipment/cargo/crate)) // For loading crates
 		load_cargo(user, A)
 
 /obj/spacepod/proc/load_cargo(mob/user, var/obj/O)
-	var/obj/item/device/spacepod_equipment/cargo/ore/C = equipment_system.cargo_system
+	var/obj/item/spacepod_equipment/cargo/ore/C = equipment_system.cargo_system
 	if(!C.storage)
 		to_chat(user, "<span class='notice'>You begin loading [O] into [src]'s [equipment_system.cargo_system]</span>")
 		if(do_after(user, 40, target = src))
@@ -734,7 +752,7 @@ obj/spacepod/proc/add_equipment(mob/user, var/obj/item/device/spacepod_equipment
 	if(!istype(user))
 		return 0
 
-	var/fukkendisk = user.GetTypeInAllContents(/obj/item/weapon/disk/nuclear)
+	var/fukkendisk = user.GetTypeInAllContents(/obj/item/disk/nuclear)
 
 	if(user.incapacitated()) //are you cuffed, dying, lying, stunned or other
 		return 0
@@ -745,10 +763,9 @@ obj/spacepod/proc/add_equipment(mob/user, var/obj/item/device/spacepod_equipment
 		to_chat(user, "<span class='danger'><B>The nuke-disk is locking the door every time you try to open it. You get the feeling that it doesn't want to go into the spacepod.</b></span>")
 		return 0
 
-	for(var/mob/living/carbon/slime/S in range(1,usr))
-		if(S.Victim == user)
-			to_chat(user, "You're too busy getting your life sucked out of you.")
-			return 0
+	if(user.has_buckled_mobs()) //mob attached to us
+		to_chat(user, "<span class='warning'>[user] will not fit into [src] because [user.p_they()] [user.p_have()] creatures attached to [user.p_them()]!</span>")
+		return
 
 	move_inside(user)
 
@@ -807,10 +824,17 @@ obj/spacepod/proc/add_equipment(mob/user, var/obj/item/device/spacepod_equipment
 	if(!istype(user))
 		return
 
-	if(usr.incapacitated()) // unconscious and restrained people can't let themselves out
+	if(usr.stat != CONSCIOUS) // unconscious people can't let themselves out
 		return
 
 	occupant_sanity_check()
+
+	if(usr.restrained())
+		to_chat(usr, "<span class='notice'>You attempt to stumble out of the [src]. This will take two minutes.</span>")
+		if(pilot)
+			to_chat(pilot, "<span class='warning'>[usr] is trying to escape the [src].</span>")
+		if(!do_after(usr, 1200, target = src))
+			return
 
 	if(user == pilot)
 		user.forceMove(get_turf(src))
@@ -949,7 +973,7 @@ obj/spacepod/proc/add_equipment(mob/user, var/obj/item/device/spacepod_equipment
 			var/obj/I = pick(true_contents)
 			if(user.put_in_any_hand_if_possible(I))
 				src.contents -= I
-				to_chat(user, "<span class='notice'>You find a [I] [pick("under the seat", "under the console", "in the mainenance access")]!</span>")
+				to_chat(user, "<span class='notice'>You find a [I] [pick("under the seat", "under the console", "in the maintenance access")]!</span>")
 			else
 				to_chat(user, "<span class='notice'>You think you saw something shiny, but you can't reach it!</span>")
 		else
@@ -969,22 +993,17 @@ obj/spacepod/proc/add_equipment(mob/user, var/obj/item/device/spacepod_equipment
 
 	return 1
 
-/datum/global_iterator/pod_preserve_temp  //normalizing cabin air temperature to 20 degrees celsium
-	delay = 20
+// Fun fact, these procs are just copypastes from mech code
+// And have been for the past 4 years
+// Please send help
+/obj/spacepod/proc/regulate_temp()
+	if(cabin_air && cabin_air.return_volume() > 0)
+		var/delta = cabin_air.temperature - T20C
+		cabin_air.temperature -= max(-10, min(10, round(delta/4,0.1)))
 
-	process(var/obj/spacepod/spacepod)
-		if(spacepod.cabin_air && spacepod.cabin_air.return_volume() > 0)
-			var/delta = spacepod.cabin_air.temperature - T20C
-			spacepod.cabin_air.temperature -= max(-10, min(10, round(delta/4,0.1)))
-
-/datum/global_iterator/pod_tank_give_air
-	delay = 15
-
-/datum/global_iterator/pod_tank_give_air/process(var/obj/spacepod/spacepod)
-	if(spacepod && spacepod.internal_tank)
-		var/datum/gas_mixture/tank_air = spacepod.internal_tank.return_air()
-		var/datum/gas_mixture/cabin_air = spacepod.cabin_air
-
+/obj/spacepod/proc/give_air()
+	if(internal_tank)
+		var/datum/gas_mixture/tank_air = internal_tank.return_air()
 		var/release_pressure = ONE_ATMOSPHERE
 		var/cabin_pressure = cabin_air.return_pressure()
 		var/pressure_delta = min(release_pressure - cabin_pressure, (tank_air.return_pressure() - cabin_pressure)/2)
@@ -995,7 +1014,7 @@ obj/spacepod/proc/add_equipment(mob/user, var/obj/item/device/spacepod_equipment
 				var/datum/gas_mixture/removed = tank_air.remove(transfer_moles)
 				cabin_air.merge(removed)
 		else if(pressure_delta < 0) //cabin pressure higher than release pressure
-			var/datum/gas_mixture/t_air = spacepod.get_turf_air()
+			var/datum/gas_mixture/t_air = get_turf_air()
 			pressure_delta = cabin_pressure - release_pressure
 			if(t_air)
 				pressure_delta = min(cabin_pressure - t_air.return_pressure(), pressure_delta)
@@ -1006,11 +1025,9 @@ obj/spacepod/proc/add_equipment(mob/user, var/obj/item/device/spacepod_equipment
 					t_air.merge(removed)
 				else //just delete the cabin gas, we're in space or some shit
 					qdel(removed)
-	else
-		return stop()
 
 /obj/spacepod/relaymove(mob/user, direction)
-	if(usr != src.pilot)
+	if(user != src.pilot)
 		return
 	handlerelaymove(user, direction)
 
@@ -1072,6 +1089,6 @@ obj/spacepod/proc/add_equipment(mob/user, var/obj/item/device/spacepod_equipment
 #undef DAMAGE
 #undef FIRE
 #undef WINDOW
-#undef LIGHT
+#undef POD_LIGHT
 #undef RIM
 #undef PAINT

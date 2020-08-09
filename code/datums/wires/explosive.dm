@@ -1,7 +1,7 @@
 /datum/wires/explosive
 	wire_count = 1
 
-var/const/WIRE_EXPLODE = 1
+#define WIRE_EXPLODE 1
 
 /datum/wires/explosive/GetWireName(index)
 	switch(index)
@@ -25,7 +25,7 @@ var/const/WIRE_EXPLODE = 1
 	..()
 
 /datum/wires/explosive/gibtonite
-	holder_type = /obj/item/weapon/twohanded/required/gibtonite
+	holder_type = /obj/item/twohanded/required/gibtonite
 
 /datum/wires/explosive/gibtonite/CanUse(mob/L)
 	return 1
@@ -34,5 +34,5 @@ var/const/WIRE_EXPLODE = 1
 	return
 
 /datum/wires/explosive/gibtonite/explode()
-	var/obj/item/weapon/twohanded/required/gibtonite/P = holder
+	var/obj/item/twohanded/required/gibtonite/P = holder
 	P.GibtoniteReaction(null, 2)

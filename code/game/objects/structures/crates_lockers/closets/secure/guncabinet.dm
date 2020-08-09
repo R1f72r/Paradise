@@ -1,6 +1,6 @@
 /obj/structure/closet/secure_closet/guncabinet
 	name = "gun cabinet"
-	req_access = list(access_armory)
+	req_access = list(ACCESS_ARMORY)
 	icon = 'icons/obj/guncabinet.dmi'
 	icon_state = "base"
 	icon_closed = "base"
@@ -26,10 +26,10 @@
 	else
 		var/lazors = 0
 		var/shottas = 0
-		for(var/obj/item/weapon/gun/G in contents)
-			if(istype(G, /obj/item/weapon/gun/energy))
+		for(var/obj/item/gun/G in contents)
+			if(istype(G, /obj/item/gun/energy))
 				lazors++
-			if(istype(G, /obj/item/weapon/gun/projectile/))
+			if(istype(G, /obj/item/gun/projectile/))
 				shottas++
 		if(lazors || shottas)
 			for(var/i = 0 to 2)

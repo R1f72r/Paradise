@@ -54,20 +54,22 @@
 /obj/machinery/disco/Destroy()
 	dance_over()
 	selection = null
+	STOP_PROCESSING(SSobj, src)
 	return ..()
 
-/obj/machinery/disco/attackby(obj/item/O, mob/user, params)
-	if(!active)
-		if(iswrench(O))
-			if(!anchored && !isinspace())
-				to_chat(user,"<span class='notice'>You secure [src] to the floor.</span>")
-				anchored = TRUE
-			else if(anchored)
-				to_chat(user,"<span class='notice'>You unsecure and disconnect [src].</span>")
-				anchored = FALSE
-			playsound(src, 'sound/items/deconstruct.ogg', 50, 1)
-			return
-	return ..()
+/obj/machinery/disco/wrench_act(mob/user, obj/item/I)
+	if(active)
+		return
+	. = TRUE
+	if(!I.use_tool(src, user, 0, volume = I.tool_volume))
+		return
+	if(!anchored && !isinspace())
+		anchored = TRUE
+		WRENCH_ANCHOR_MESSAGE
+	else if(anchored)
+		anchored = FALSE
+		WRENCH_UNANCHOR_MESSAGE
+	playsound(src, 'sound/items/deconstruct.ogg', 50, 1)
 
 /obj/machinery/disco/update_icon()
 	if(active)
@@ -118,7 +120,7 @@
 	add_fingerprint(usr)
 	switch(href_list["action"])
 		if("toggle")
-			if(qdeleted(src))
+			if(QDELETED(src))
 				return
 			if(!active)
 				if(stop > world.time)
@@ -128,7 +130,7 @@
 				active = TRUE
 				update_icon()
 				dance_setup()
-				processing_objects.Add(src)
+				START_PROCESSING(SSobj, src)
 				lights_spin()
 				updateUsrDialog()
 			else if(active)
@@ -143,7 +145,7 @@
 			for(var/datum/track/S in songs)
 				available[S.song_name] = S
 			var/selected = input(usr, "Choose your song", "Track:") as null|anything in available
-			if(qdeleted(src) || !selected || !istype(available[selected], /datum/track))
+			if(QDELETED(src) || !selected || !istype(available[selected], /datum/track))
 				return
 			selection = available[selected]
 			updateUsrDialog()
@@ -156,16 +158,16 @@
 		if("honk")
 			deejay('sound/items/bikehorn.ogg')
 		if("pump")
-			deejay('sound/weapons/shotgunpump.ogg')
+			deejay('sound/weapons/gun_interactions/shotgunpump.ogg')
 		if("pop")
-			deejay('sound/weapons/gunshot3.ogg')
+			deejay('sound/weapons/gunshots/gunshot3.ogg')
 		if("saber")
 			deejay('sound/weapons/saberon.ogg')
 		if("harm")
-			deejay('sound/ai/harmalarm.ogg')
+			deejay('sound/AI/harmalarm.ogg')
 
 /obj/machinery/disco/proc/deejay(S)
-	if(qdeleted(src) || !active || charge < 5)
+	if(QDELETED(src) || !active || charge < 5)
 		to_chat(usr, "<span class='warning'>The device is not able to play more DJ sounds at this time.</span>")
 		return
 	charge -= 5
@@ -176,56 +178,56 @@
 	var/turf/cen = get_turf(src)
 	FOR_DVIEW(var/turf/t, 3, get_turf(src),INVISIBILITY_LIGHTING)
 		if(t.x == cen.x && t.y > cen.y)
-			var/obj/item/device/flashlight/spotlight/L = new /obj/item/device/flashlight/spotlight(t)
+			var/obj/item/flashlight/spotlight/L = new /obj/item/flashlight/spotlight(t)
 			L.light_color = "red"
 			L.light_power = 30 - (get_dist(src, L) * 8)
 			L.range = 1+get_dist(src, L)
 			spotlights+=L
 			continue
 		if(t.x == cen.x && t.y < cen.y)
-			var/obj/item/device/flashlight/spotlight/L = new /obj/item/device/flashlight/spotlight(t)
+			var/obj/item/flashlight/spotlight/L = new /obj/item/flashlight/spotlight(t)
 			L.light_color = "purple"
 			L.light_power = 30 - (get_dist(src, L) * 8)
 			L.range = 1+get_dist(src, L)
 			spotlights+=L
 			continue
 		if(t.x > cen.x && t.y == cen.y)
-			var/obj/item/device/flashlight/spotlight/L = new /obj/item/device/flashlight/spotlight(t)
+			var/obj/item/flashlight/spotlight/L = new /obj/item/flashlight/spotlight(t)
 			L.light_color = "#ffff00"
 			L.light_power = 30 - (get_dist(src, L) * 8)
 			L.range = 1+get_dist(src, L)
 			spotlights+=L
 			continue
 		if(t.x < cen.x && t.y == cen.y)
-			var/obj/item/device/flashlight/spotlight/L = new /obj/item/device/flashlight/spotlight(t)
+			var/obj/item/flashlight/spotlight/L = new /obj/item/flashlight/spotlight(t)
 			L.light_color = "green"
 			L.light_power = 30 - (get_dist(src, L) * 8)
 			L.range = 1+get_dist(src, L)
 			spotlights+=L
 			continue
 		if((t.x+1 == cen.x && t.y+1 == cen.y) || (t.x+2==cen.x && t.y+2 == cen.y))
-			var/obj/item/device/flashlight/spotlight/L = new /obj/item/device/flashlight/spotlight(t)
+			var/obj/item/flashlight/spotlight/L = new /obj/item/flashlight/spotlight(t)
 			L.light_color = "sw"
 			L.light_power = 30 - (get_dist(src, L) * 8)
 			L.range = 1.4+get_dist(src, L)
 			spotlights+=L
 			continue
 		if((t.x-1 == cen.x && t.y-1 == cen.y) || (t.x-2==cen.x && t.y-2 == cen.y))
-			var/obj/item/device/flashlight/spotlight/L = new /obj/item/device/flashlight/spotlight(t)
+			var/obj/item/flashlight/spotlight/L = new /obj/item/flashlight/spotlight(t)
 			L.light_color = "ne"
 			L.light_power = 30 - (get_dist(src, L) * 8)
 			L.range = 1.4+get_dist(src, L)
 			spotlights+=L
 			continue
 		if((t.x-1 == cen.x && t.y+1 == cen.y) || (t.x-2==cen.x && t.y+2 == cen.y))
-			var/obj/item/device/flashlight/spotlight/L = new /obj/item/device/flashlight/spotlight(t)
+			var/obj/item/flashlight/spotlight/L = new /obj/item/flashlight/spotlight(t)
 			L.light_color = "se"
 			L.light_power = 30 - (get_dist(src, L) * 8)
 			L.range = 1.4+get_dist(src, L)
 			spotlights+=L
 			continue
 		if((t.x+1 == cen.x && t.y-1 == cen.y) || (t.x+2==cen.x && t.y-2 == cen.y))
-			var/obj/item/device/flashlight/spotlight/L = new /obj/item/device/flashlight/spotlight(t)
+			var/obj/item/flashlight/spotlight/L = new /obj/item/flashlight/spotlight(t)
 			L.light_color = "nw"
 			L.light_power = 30 - (get_dist(src, L) * 8)
 			L.range = 1.4+get_dist(src, L)
@@ -241,7 +243,7 @@
 
 /obj/machinery/disco/proc/lights_spin()
 	for(var/i in 1 to 25)
-		if(qdeleted(src) || !active)
+		if(QDELETED(src) || !active)
 			return
 		var/obj/effect/overlay/sparkles/S = new /obj/effect/overlay/sparkles(src)
 		S.alpha = 0
@@ -265,8 +267,8 @@
 	for(var/obj/reveal in sparkles)
 		reveal.alpha = 255
 	while(active)
-		for(var/obj/item/device/flashlight/spotlight/glow in spotlights) // The multiples reflects custom adjustments to each colors after dozens of tests
-			if(qdeleted(src) || !active || qdeleted(glow))
+		for(var/obj/item/flashlight/spotlight/glow in spotlights) // The multiples reflects custom adjustments to each colors after dozens of tests
+			if(QDELETED(src) || !active || QDELETED(glow))
 				return
 			if(glow.light_color == "red")
 				glow.light_color = "nw"
@@ -321,6 +323,9 @@
 
 /obj/machinery/disco/proc/dance(mob/living/M) //Show your moves
 	set waitfor = FALSE
+	if(M.client && !(M.client.prefs.sound & SOUND_DISCO)) //We have a client that doesn't want to dance.
+		rangers -= M //Doing that here as it'll be checked less often than in processing.
+		return
 	switch(rand(0,9))
 		if(0 to 1)
 			dance2(M)
@@ -395,7 +400,7 @@
 	while(time)
 		sleep(speed)
 		for(var/i in 1 to speed)
-			M.setDir(pick(cardinal))
+			M.setDir(pick(GLOB.cardinal))
 			M.resting = !M.resting
 			M.update_canmove()
 		 time--
@@ -459,20 +464,21 @@
 		var/sound/song_played = sound(selection.song_path)
 
 		for(var/mob/M in range(10,src))
-			if(!(M in rangers))
-				rangers[M] = TRUE
-				M.playsound_local(get_turf(M), null, 100, channel = CHANNEL_JUKEBOX, S = song_played)
-			if(prob(5+(allowed(M) * 4)) && M.canmove)
-				dance(M)
+			if(!M.client || M.client.prefs.sound & SOUND_DISCO)
+				if(!(M in rangers))
+					rangers[M] = TRUE
+					M.playsound_local(get_turf(M), null, 100, channel = CHANNEL_JUKEBOX, S = song_played)
 		for(var/mob/L in rangers)
 			if(get_dist(src, L) > 10)
 				rangers -= L
 				if(!L || !L.client)
 					continue
 				L.stop_sound_channel(CHANNEL_JUKEBOX)
+			else if(prob(9) && L.canmove && isliving(L))
+				dance(L)
 	else if(active)
 		active = FALSE
-		processing_objects.Remove(src)
+		STOP_PROCESSING(SSobj, src)
 		dance_over()
 		playsound(src,'sound/machines/terminal_off.ogg',50,1)
 		icon_state = "disco0"

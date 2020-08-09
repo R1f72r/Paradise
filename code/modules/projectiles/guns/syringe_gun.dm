@@ -1,4 +1,4 @@
-/obj/item/weapon/gun/syringe
+/obj/item/gun/syringe
 	name = "syringe gun"
 	desc = "A spring loaded rifle designed to fit syringes, used to incapacitate unruly patients from a distance."
 	icon_state = "syringegun"
@@ -14,77 +14,78 @@
 	var/list/syringes = list()
 	var/max_syringes = 1
 
-/obj/item/weapon/gun/syringe/New()
+/obj/item/gun/syringe/New()
 	..()
 	chambered = new /obj/item/ammo_casing/syringegun(src)
 
-/obj/item/weapon/gun/syringe/newshot()
-	if(!syringes.len)
+/obj/item/gun/syringe/process_chamber()
+	if(!length(syringes) || chambered.BB)
 		return
 
-	var/obj/item/weapon/reagent_containers/syringe/S = syringes[1]
-
+	var/obj/item/reagent_containers/syringe/S = syringes[1]
 	if(!S)
 		return
 
-	chambered.BB = new S.projectile_type (src)
-
+	chambered.BB = new S.projectile_type(src)
 	S.reagents.trans_to(chambered.BB, S.reagents.total_volume)
 	chambered.BB.name = S.name
+
 	syringes.Remove(S)
-
 	qdel(S)
-	return
 
-/obj/item/weapon/gun/syringe/process_chamber()
-	return
-
-/obj/item/weapon/gun/syringe/afterattack(atom/target as mob|obj|turf, mob/living/user as mob|obj, params)
+/obj/item/gun/syringe/afterattack(atom/target, mob/living/user, flag, params)
 	if(target == loc)
 		return
-	newshot()
 	..()
 
-/obj/item/weapon/gun/syringe/examine(mob/user)
-	..()
-	to_chat(user, "Can hold [max_syringes] syringe\s. Has [syringes.len] syringe\s remaining.")
+/obj/item/gun/syringe/examine(mob/user)
+	. = ..()
+	var/num_syringes = syringes.len + (chambered.BB ? 1 : 0)
+	. += "Can hold [max_syringes] syringe\s. Has [num_syringes] syringe\s remaining."
 
-/obj/item/weapon/gun/syringe/attack_self(mob/living/user as mob)
-	if(!syringes.len)
+/obj/item/gun/syringe/attack_self(mob/living/user)
+	if(!length(syringes) && !chambered.BB)
 		to_chat(user, "<span class='notice'>[src] is empty.</span>")
-		return 0
+		return FALSE
 
-	var/obj/item/weapon/reagent_containers/syringe/S = syringes[syringes.len]
+	var/obj/item/reagent_containers/syringe/S
+	if(chambered.BB) // Remove the chambered syringe first
+		S = new()
+		chambered.BB.reagents.trans_to(S, chambered.BB.reagents.total_volume)
+		qdel(chambered.BB)
+		chambered.BB = null
+	else
+		S = syringes[length(syringes)]
 
-	if(!S)
-		return 0
-	S.loc = user.loc
-
+	user.put_in_hands(S)
 	syringes.Remove(S)
+	process_chamber()
 	to_chat(user, "<span class='notice'>You unload [S] from \the [src]!</span>")
+	return TRUE
 
-	return 1
-
-/obj/item/weapon/gun/syringe/attackby(obj/item/A, mob/user, params, show_msg = 1)
-	if(istype(A, /obj/item/weapon/reagent_containers/syringe))
-		if(syringes.len < max_syringes)
+/obj/item/gun/syringe/attackby(obj/item/A, mob/user, params, show_msg = TRUE)
+	if(istype(A, /obj/item/reagent_containers/syringe))
+		var/in_clip = length(syringes) + (chambered.BB ? 1 : 0)
+		if(in_clip < max_syringes)
 			if(!user.unEquip(A))
 				return
 			to_chat(user, "<span class='notice'>You load [A] into \the [src]!</span>")
 			syringes.Add(A)
 			A.loc = src
-			return 1
+			process_chamber() // Chamber the syringe if none is already
+			return TRUE
 		else
 			to_chat(user, "<span class='notice'>[src] cannot hold more syringes.</span>")
-	return 0
+	else
+		return ..()
 
-/obj/item/weapon/gun/syringe/rapidsyringe
+/obj/item/gun/syringe/rapidsyringe
 	name = "rapid syringe gun"
 	desc = "A modification of the syringe gun design, using a rotating cylinder to store up to six syringes."
 	icon_state = "rapidsyringegun"
 	max_syringes = 6
 
-/obj/item/weapon/gun/syringe/syndicate
+/obj/item/gun/syringe/syndicate
 	name = "dart pistol"
 	desc = "A small spring-loaded sidearm that functions identically to a syringe gun."
 	icon_state = "syringe_pistol"

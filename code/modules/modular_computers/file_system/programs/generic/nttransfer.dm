@@ -1,4 +1,4 @@
-var/global/nttransfer_uid = 0
+GLOBAL_VAR_INIT(nttransfer_uid, 0)
 
 /datum/computer_file/program/nttransfer
 	filename = "nttransfer"
@@ -24,8 +24,8 @@ var/global/nttransfer_uid = 0
 	var/upload_menu = 0									// Whether we show the program list and upload menu
 
 /datum/computer_file/program/nttransfer/New()
-	unique_token = nttransfer_uid
-	nttransfer_uid++
+	unique_token = GLOB.nttransfer_uid
+	GLOB.nttransfer_uid++
 	..()
 
 /datum/computer_file/program/nttransfer/process_tick()
@@ -66,7 +66,7 @@ var/global/nttransfer_uid = 0
 
 // Finishes download and attempts to store the file on HDD
 /datum/computer_file/program/nttransfer/proc/finish_download()
-	var/obj/item/weapon/computer_hardware/hard_drive/hard_drive = computer.all_components[MC_HDD]
+	var/obj/item/computer_hardware/hard_drive/hard_drive = computer.all_components[MC_HDD]
 	if(!computer || !hard_drive || !hard_drive.store_file(downloaded_file))
 		error = "I/O Error:  Unable to save file. Check your hard drive and try again."
 	finalize_download()
@@ -86,7 +86,7 @@ var/global/nttransfer_uid = 0
 
 
 /datum/computer_file/program/nttransfer/ui_interact(mob/user, ui_key = "main", var/datum/nanoui/ui = null, var/force_open = 1)
-	ui = nanomanager.try_update_ui(user, src, ui_key, ui, force_open)
+	ui = SSnanoui.try_update_ui(user, src, ui_key, ui, force_open)
 	if(!ui)
 		var/datum/asset/assets = get_asset_datum(/datum/asset/simple/headers)
 		assets.send(user)
@@ -100,7 +100,7 @@ var/global/nttransfer_uid = 0
 		return 1
 	switch(href_list["action"])
 		if("PRG_downloadfile")
-			for(var/datum/computer_file/program/nttransfer/P in ntnet_global.fileservers)
+			for(var/datum/computer_file/program/nttransfer/P in GLOB.ntnet_global.fileservers)
 				if("[P.unique_token]" == href_list["id"])
 					remote = P
 					break
@@ -118,8 +118,8 @@ var/global/nttransfer_uid = 0
 			error = ""
 			upload_menu = 0
 			finalize_download()
-			if(src in ntnet_global.fileservers)
-				ntnet_global.fileservers.Remove(src)
+			if(src in GLOB.ntnet_global.fileservers)
+				GLOB.ntnet_global.fileservers.Remove(src)
 			for(var/datum/computer_file/program/nttransfer/T in connected_clients)
 				T.crash_download("Remote server has forcibly closed the connection")
 			provided_file = null
@@ -134,7 +134,7 @@ var/global/nttransfer_uid = 0
 			server_password = pass
 			return 1
 		if("PRG_uploadfile")
-			var/obj/item/weapon/computer_hardware/hard_drive/hard_drive = computer.all_components[MC_HDD]
+			var/obj/item/computer_hardware/hard_drive/hard_drive = computer.all_components[MC_HDD]
 			for(var/datum/computer_file/F in hard_drive.stored_files)
 				if("[F.uid]" == href_list["id"])
 					if(F.unsendable)
@@ -145,7 +145,7 @@ var/global/nttransfer_uid = 0
 						if(!P.can_run(usr,transfer = 1))
 							error = "Access Error: Insufficient rights to upload file."
 					provided_file = F
-					ntnet_global.fileservers.Add(src)
+					GLOB.ntnet_global.fileservers.Add(src)
 					return
 			error = "I/O Error: Unable to locate file on hard drive."
 			return 1
@@ -173,7 +173,7 @@ var/global/nttransfer_uid = 0
 		data["upload_filename"] = "[provided_file.filename].[provided_file.filetype]"
 	else if (upload_menu)
 		var/list/all_files[0]
-		var/obj/item/weapon/computer_hardware/hard_drive/hard_drive = computer.all_components[MC_HDD]
+		var/obj/item/computer_hardware/hard_drive/hard_drive = computer.all_components[MC_HDD]
 		for(var/datum/computer_file/F in hard_drive.stored_files)
 			all_files.Add(list(list(
 			"uid" = F.uid,
@@ -183,7 +183,7 @@ var/global/nttransfer_uid = 0
 		data["upload_filelist"] = all_files
 	else
 		var/list/all_servers[0]
-		for(var/datum/computer_file/program/nttransfer/P in ntnet_global.fileservers)
+		for(var/datum/computer_file/program/nttransfer/P in GLOB.ntnet_global.fileservers)
 			all_servers.Add(list(list(
 			"uid" = P.unique_token,
 			"filename" = "[P.provided_file.filename].[P.provided_file.filetype]",
