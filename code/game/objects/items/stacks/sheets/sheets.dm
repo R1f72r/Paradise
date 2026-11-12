@@ -1,29 +1,28 @@
 /obj/item/stack/sheet
 	name = "sheet"
-	w_class = WEIGHT_CLASS_NORMAL
+	icon = 'icons/obj/stacks/minerals.dmi'
+	lefthand_file = 'icons/mob/inhands/sheet_lefthand.dmi'
+	righthand_file = 'icons/mob/inhands/sheet_righthand.dmi'
 	force = 5
 	throwforce = 5
-	max_amount = 50
 	throw_speed = 1
 	throw_range = 3
 	attack_verb = list("bashed", "battered", "bludgeoned", "thrashed", "smashed")
 	var/perunit = MINERAL_MATERIAL_AMOUNT
 	var/sheettype = null //this is used for girders in the creation of walls/false walls
+	var/point_value = 0 //turn-in value for the gulag stacker - loosely relative to its rarity.
+
 	var/created_window = null		//apparently glass sheets don't share a base type for glass specifically, so each had to define these vars individually
 	var/full_window = null			//moving the var declaration to here so this can be checked cleaner until someone is willing to make them share a base type properly
-	usesound = 'sound/items/Deconstruct.ogg'
-	toolspeed = 1
+	usesound = 'sound/items/deconstruct.ogg'
+	var/wall_allowed = TRUE	//determines if sheet can be used in wall construction or not.
+	dynamic_icon_state = TRUE
 
+	/// Power multiplier when this sheet is used in a solar panel, leave blank if you shouldn't be able to make a solar out of this.
+	var/solar_mult
+	/// Icon state a solar takes on with this sheet inserted.
+	var/solar_type = SOLAR_TYPE_GLASS
 
-// Since the sheetsnatcher was consolidated into weapon/storage/bag we now use
-// item/attackby() properly, making this unnecessary
-
-/*/obj/item/stack/sheet/attackby(obj/item/weapon/W as obj, mob/user as mob, params)
-	if(istype(W, /obj/item/weapon/storage/bag/sheetsnatcher))
-		var/obj/item/weapon/storage/bag/sheetsnatcher/S = W
-		if(!S.mode)
-			S.add(src,user)
-		else
-			for(var/obj/item/stack/sheet/stack in locate(src.x,src.y,src.z))
-				S.add(stack,user)
-	..()*/
+/obj/item/stack/sheet/examine(mob/user)
+	. = ..()
+	. += SPAN_NOTICE("<b>Use it in hand</b> to bring up the recipe menu. If you have enough sheets, click on something on the list to build it.")

@@ -1,38 +1,28 @@
-/obj/item/weapon/grenade/smokebomb
-	desc = "It is set to detonate in 2 seconds."
+/obj/item/grenade/smokebomb
 	name = "smoke bomb"
-	icon = 'icons/obj/grenade.dmi'
-	icon_state = "flashbang"
-	det_time = 20
-	item_state = "flashbang"
-	slot_flags = SLOT_BELT
+	desc = "A grenade filled with chemical agents that will turn into a dense smoke when detonated, making it impossible to see through without specialised optics."
+	icon_state = "smoke"
+	inhand_icon_state = "smoke"
+	det_time = 2 SECONDS
+	modifiable_timer = FALSE
 	var/datum/effect_system/smoke_spread/bad/smoke
 
-	New()
-		..()
-		src.smoke = new /datum/effect_system/smoke_spread/bad
-		src.smoke.attach(src)
+/obj/item/grenade/smokebomb/Initialize(mapload)
+	. = ..()
+	smoke = new /datum/effect_system/smoke_spread/bad
+	smoke.attach(src)
 
-	Destroy()
-		QDEL_NULL(smoke)
-		return ..()
+/obj/item/grenade/smokebomb/Destroy()
+	QDEL_NULL(smoke)
+	return ..()
 
-	prime()
-		playsound(src.loc, 'sound/effects/smoke.ogg', 50, 1, -3)
-		src.smoke.set_up(10, 0, usr.loc)
-		spawn(0)
-			src.smoke.start()
-			sleep(10)
-			src.smoke.start()
-			sleep(10)
-			src.smoke.start()
-			sleep(10)
-			src.smoke.start()
-
-		for(var/obj/structure/blob/B in view(8,src))
-			var/damage = round(30/(get_dist(B,src)+1))
-			B.health -= damage
-			B.update_icon()
-		sleep(80)
-		qdel(src)
-		return
+/obj/item/grenade/smokebomb/prime()
+	playsound(src.loc, 'sound/effects/smoke.ogg', 50, TRUE, -3)
+	smoke.set_up(10, FALSE)
+	// The grenade is deleted straight away, so the smoke is moved to this tile and let go so Destroy() doesn't stop the later puffs.
+	smoke.attach(get_turf(src))
+	smoke.start()
+	for(var/puff in 1 to 3)
+		addtimer(CALLBACK(smoke, TYPE_PROC_REF(/datum/effect_system/smoke_spread, start)), puff SECONDS)
+	smoke = null
+	qdel(src)

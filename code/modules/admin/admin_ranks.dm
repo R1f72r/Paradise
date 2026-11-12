@@ -1,30 +1,21 @@
-var/list/admin_ranks = list()								//list of all ranks with associated rights
+GLOBAL_LIST_EMPTY(admin_ranks)								//list of all ranks with associated rights
+GLOBAL_PROTECT(admin_ranks) // this shit is being protected for obvious reasons
 
 //load our rank - > rights associations
 /proc/load_admin_ranks()
-	admin_ranks.Cut()
+	GLOB.admin_ranks.Cut()
 
 	var/previous_rights = 0
 
-	//load text from file
-	var/list/Lines = file2list("config/admin_ranks.txt")
-
-	//process each line seperately
-	for(var/line in Lines)
-		if(!length(line))				continue
-		if(copytext(line,1,2) == "#")	continue
-
-		var/list/List = splittext(line,"+")
-		if(!List.len)					continue
-
-		var/rank = ckeyEx(List[1])
-		switch(rank)
-			if(null,"")		continue
-			if("Removed")	continue				//Reserved
+	// Process each rank set seperately
+	// key: rank name | value: list of rights
+	for(var/rankname in GLOB.configuration.admin.rank_rights_map)
+		var/list/rank_right_tokens = GLOB.configuration.admin.rank_rights_map[rankname]
 
 		var/rights = 0
-		for(var/i=2, i<=List.len, i++)
-			switch(ckey(List[i]))
+		for(var/right_token in rank_right_tokens)
+			var/token = lowertext(splittext(right_token, "+")[2])
+			switch(token)
 				if("@","prev")					rights |= previous_rights
 				if("buildmode","build")			rights |= R_BUILDMODE
 				if("admin")						rights |= R_ADMIN
@@ -42,99 +33,187 @@ var/list/admin_ranks = list()								//list of all ranks with associated rights
 				if("spawn","create")			rights |= R_SPAWN
 				if("mod")						rights |= R_MOD
 				if("mentor")					rights |= R_MENTOR
+				if("developer")					rights |= R_DEV_TEAM
 				if("proccall")					rights |= R_PROCCALL
+				if("viewruntimes")				rights |= R_VIEWRUNTIMES
+				if("maintainer")				rights |= R_MAINTAINER
 
-		admin_ranks[rank] = rights
+		GLOB.admin_ranks[rankname] = rights
 		previous_rights = rights
 
 	#ifdef TESTING
 	var/msg = "Permission Sets Built:\n"
-	for(var/rank in admin_ranks)
-		msg += "\t[rank] - [admin_ranks[rank]]\n"
+	for(var/rank in GLOB.admin_ranks)
+		msg += "\t[rank] - [GLOB.admin_ranks[rank]]\n"
 	testing(msg)
 	#endif
 
-/hook/startup/proc/loadAdmins()
-	load_admins()
-	return 1
+/proc/reload_one_admin(admin_ckey, silent = FALSE)
+	if(IsAdminAdvancedProcCall())
+		to_chat(usr, SPAN_BOLDANNOUNCE("Admin reload blocked: Advanced ProcCall detected."))
+		message_admins("[key_name(usr)] attempted to reload an admin via advanced proc-call")
+		log_admin("[key_name(usr)] attempted to reload an admin via advanced proc-call")
+		return
 
-/proc/load_admins()
-	//clear the datums references
-	admin_datums.Cut()
-	for(var/client/C in admins)
-		C.remove_admin_verbs()
-		C.holder = null
-	admins.Cut()
+	// Make sure it's actually in ckey format.
+	admin_ckey = ckey(admin_ckey)
 
-	if(config.admin_legacy_system)
+	// Remove any existing permissions.
+	var/datum/admins/admin_datum = GLOB.admin_datums[admin_ckey]
+	if(admin_datum)
+		qdel(admin_datum)
+
+	if(admin_ckey in (GLOB.de_admins + GLOB.de_mentors))
+		if(!silent)
+			message_admins(SPAN_NOTICE("Admin permissions for [admin_ckey] will reload when they re-admin."))
+		return
+
+	if(admin_ckey in GLOB.directory)
+		var/client/admin = GLOB.directory[admin_ckey]
+		var/localhosted = admin.try_localhost_autoadmin()
+		if(localhosted)
+			if(!silent)
+				message_admins(SPAN_NOTICE("Admin permissions for [admin_ckey] reloaded. Full permissions granted as they are currently connected from localhost."))
+			return
+
+	if(GLOB.configuration.admin.use_database_admins)
+		var/datum/db_query/get_admin = SSdbcore.NewQuery({"
+			SELECT
+				-- Use the display_rank if set, otherwise the name of their permissions_rank.
+				IFNULL(admin.display_rank, admin_ranks.name),
+				-- Permissions start with their admin rank permissions (if any)
+				(IFNULL(admin_ranks.default_permissions, 0)
+				-- Then add in any extra permissions they've been granted.
+				| admin.extra_permissions)
+				-- And exclude any permissions they've had removed.
+				& ~admin.removed_permissions
+			FROM admin
+			-- We want all admins, and admin_ranks where available.
+			LEFT OUTER JOIN admin_ranks
+			ON admin.permissions_rank = admin_ranks.id
+			WHERE admin.ckey=:admin_ckey"}, list(
+				"admin_ckey" = admin_ckey
+			))
+		if(!get_admin.warn_execute())
+			qdel(get_admin)
+			return
+
+		if(get_admin.NextRow())
+			var/rank = get_admin.item[1]
+			var/rights = get_admin.item[2]
+			if(rights == 0)
+				// If you have no rights, you don't get an admin datum.
+				qdel(get_admin)
+				if(!silent)
+					message_admins(SPAN_NOTICE("Admin permissions for [admin_ckey] have been reloaded."))
+				return
+			admin_datum = new(rank, rights, admin_ckey)
+			qdel(get_admin)
+	else
+		var/rank = GLOB.configuration.admin.ckey_rank_map[admin_ckey]
+
+		// Load permissions associated with this rank
+		var/rights = GLOB.admin_ranks[rank]
+
+		// Create their admin datum.
+		admin_datum = new /datum/admins(rank, rights, admin_ckey)
+
+	// Set up their permissions.
+	if(admin_datum)
+		admin_datum.associate(GLOB.directory[admin_ckey])
+
+	if(!silent)
+		message_admins(SPAN_NOTICE("Admin permissions for [admin_ckey] have been reloaded."))
+
+/proc/load_admins(run_async = FALSE)
+	if(IsAdminAdvancedProcCall())
+		to_chat(usr, SPAN_BOLDANNOUNCE("Admin reload blocked: Advanced ProcCall detected."))
+		message_admins("[key_name(usr)] attempted to reload admins via advanced proc-call")
+		log_admin("[key_name(usr)] attempted to reload admins via advanced proc-call")
+		return
+
+	// Revoke all permissions.
+	var/list/localhost_admins = list()
+	for(var/datum/admins/admin_datum in GLOB.admin_datums)
+		if(admin_datum.is_localhost_autoadmin && admin_datum.owner)
+			localhost_admins += admin_datum.owner
+		qdel(admin_datum)
+	GLOB.admin_datums.Cut()
+	GLOB.admins.Cut()
+
+	// Just to be double-sure, revoke all profiler access
+	for(var/A in world.GetConfig("admin"))
+		world.SetConfig("APP/admin", A, null)
+
+	if(!GLOB.configuration.admin.use_database_admins)
 		load_admin_ranks()
 
-		//load text from file
-		var/list/Lines = file2list("config/admins.txt")
+		for(var/ckey in GLOB.configuration.admin.ckey_rank_map)
+			var/rank = GLOB.configuration.admin.ckey_rank_map[ckey]
 
-		//process each line seperately
-		for(var/line in Lines)
-			if(!length(line))				continue
-			if(copytext(line,1,2) == "#")	continue
+			// Load permissions associated with this rank
+			var/rights = GLOB.admin_ranks[rank]
 
-			//Split the line at every "-"
-			var/list/List = splittext(line, "-")
-			if(!List.len)					continue
-
-			//ckey is before the first "-"
-			var/ckey = ckey(List[1])
-			if(!ckey)						continue
-
-			//rank follows the first "-"
-			var/rank = ""
-			if(List.len >= 2)
-				rank = ckeyEx(List[2])
-
-			//load permissions associated with this rank
-			var/rights = admin_ranks[rank]
-
-			//create the admin datum and store it for later use
+			// Create their admin datum.
 			var/datum/admins/D = new /datum/admins(rank, rights, ckey)
 
-			//find the client for a ckey if they are connected and associate them with the new admin datum
-			D.associate(directory[ckey])
+			// Set up their admin permissions.
+			D.associate(GLOB.directory[ckey])
 
 	else
 		//The current admin system uses SQL
-
-		establish_db_connection()
-		if(!dbcon.IsConnected())
-			log_to_dd("Failed to connect to database in load_admins(). Reverting to legacy system.")
-			diary << "Failed to connect to database in load_admins(). Reverting to legacy system."
-			config.admin_legacy_system = 1
+		if(!SSdbcore.IsConnected())
+			log_world("Failed to connect to database in load_admins(). Reverting to legacy system.")
+			GLOB.configuration.admin.use_database_admins = FALSE
 			load_admins()
 			return
 
-		var/DBQuery/query = dbcon.NewQuery("SELECT ckey, rank, level, flags FROM [format_table_name("admin")]")
-		query.Execute()
-		while(query.NextRow())
-			var/ckey = query.item[1]
-			var/rank = query.item[2]
-			if(rank == "Removed")	continue	//This person was de-adminned. They are only in the admin list for archive purposes.
+		var/datum/db_query/get_admins = SSdbcore.NewQuery({"
+			SELECT
+				admin.ckey,
+				-- Use the display_rank if set, otherwise the name of their permissions_rank.
+				IFNULL(admin.display_rank, admin_ranks.name),
+				-- Permissions start with their admin rank permissions (if any)
+				(IFNULL(admin_ranks.default_permissions, 0)
+				-- Then add in any extra permissions they've been granted.
+				| admin.extra_permissions)
+				-- And exclude any permissions they've had removed.
+				& ~admin.removed_permissions
+			FROM admin
+			-- We want all admins, and admin_ranks where available.
+			LEFT OUTER JOIN admin_ranks
+			ON admin.permissions_rank = admin_ranks.id"})
+		if(!get_admins.warn_execute(async=run_async))
+			qdel(get_admins)
+			return
 
-			var/rights = query.item[4]
-			if(istext(rights))	rights = text2num(rights)
+		while(get_admins.NextRow())
+			var/ckey = get_admins.item[1]
+			var/rank = get_admins.item[2]
+			var/rights = get_admins.item[3]
+			if(rights == 0)
+				// If you have no rights, you don't get an admin datum.
+				continue
 			var/datum/admins/D = new /datum/admins(rank, rights, ckey)
 
-			//find the client for a ckey if they are connected and associate them with the new admin datum
-			D.associate(directory[ckey])
-		if(!admin_datums)
-			log_to_dd("The database query in load_admins() resulted in no admins being added to the list. Reverting to legacy system.")
-			diary << "The database query in load_admins() resulted in no admins being added to the list. Reverting to legacy system."
-			config.admin_legacy_system = 1
+			// Set up their admin permissions.
+			D.associate(GLOB.directory[ckey])
+		qdel(get_admins)
+
+		if(!length(GLOB.admin_datums))
+			log_world("The database query in load_admins() resulted in no admins being added to the list. Reverting to legacy system.")
+			GLOB.configuration.admin.use_database_admins = FALSE
 			load_admins()
 			return
+
+	for(var/client/localhost_admin in localhost_admins)
+		localhost_admin.try_localhost_autoadmin()
 
 	#ifdef TESTING
 	var/msg = "Admins Built:\n"
-	for(var/ckey in admin_datums)
+	for(var/ckey in GLOB.admin_datums)
 		var/rank
-		var/datum/admins/D = admin_datums[ckey]
+		var/datum/admins/D = GLOB.admin_datums[ckey]
 		if(D)	rank = D.rank
 		msg += "\t[ckey] - [rank]\n"
 	testing(msg)
@@ -142,13 +221,13 @@ var/list/admin_ranks = list()								//list of all ranks with associated rights
 
 
 #ifdef TESTING
-/client/verb/changerank(newrank in admin_ranks)
+/client/verb/changerank(newrank in GLOB.admin_ranks)
 	if(holder)
 		holder.rank = newrank
-		holder.rights = admin_ranks[newrank]
+		holder.rights = GLOB.admin_ranks[newrank]
 	else
-		holder = new /datum/admins(newrank,admin_ranks[newrank],ckey)
-	remove_admin_verbs()
+		holder = new /datum/admins(newrank,GLOB.admin_ranks[newrank],ckey)
+	hide_verbs()
 	holder.associate(src)
 
 /client/verb/changerights(newrights as num)
@@ -156,7 +235,7 @@ var/list/admin_ranks = list()								//list of all ranks with associated rights
 		holder.rights = newrights
 	else
 		holder = new /datum/admins("testing",newrights,ckey)
-	remove_admin_verbs()
+	hide_verbs()
 	holder.associate(src)
 
 #endif

@@ -12,8 +12,8 @@
 	var/report_message = "Complete this goal."
 
 /datum/station_goal/proc/send_report()
-	priority_announcement.Announce("Priority Nanotrasen directive received. Project \"[name]\" details inbound.", "Incoming Priority Message", 'sound/AI/commandreport.ogg')
-	print_command_report(get_report(), "Nanotrasen Directive [pick(phonetic_alphabet)] \Roman[rand(1,50)]")
+	GLOB.minor_announcement.Announce("Priority Nanotrasen directive received. Project \"[html_decode(name)]\" details inbound.", "Incoming Priority Message", 'sound/AI/commandreport.ogg')
+	print_command_report(get_report(), "Nanotrasen Directive [pick(GLOB.phonetic_alphabet)] \Roman[rand(1,50)]", FALSE)
 	on_report()
 
 /datum/station_goal/proc/on_report()
@@ -28,12 +28,12 @@
 
 /datum/station_goal/proc/print_result()
 	if(check_completion())
-		to_chat(world, "<b>Station Goal</b> : [name] :  <span class='greenannounce'>Completed!</span>")
+		to_chat(world, "<b>Station Goal</b>: [name]:  [SPAN_GREENANNOUNCE("Completed!")]")
 	else
-		to_chat(world, "<b>Station Goal</b> : [name] : <span class='boldannounce'>Failed!</span>")
+		to_chat(world, "<b>Station Goal</b>: [name]: [SPAN_BOLDANNOUNCEIC("Failed!")]")
 
 /datum/station_goal/Destroy()
-	ticker.mode.station_goals -= src
+	SSticker.mode.station_goals -= src
 	. = ..()
 
 /datum/station_goal/Topic(href, href_list)
@@ -45,5 +45,11 @@
 	if(href_list["announce"])
 		on_report()
 		send_report()
+		message_admins("[key_name_admin(usr)] sent an announcement for station goal [src]")
+		log_admin("[key_name_admin(usr)] sent an announcement for station goal [src]")
 	else if(href_list["remove"])
+		SSticker.mode.station_goals -= src
+		message_admins("[key_name_admin(usr)] removed station goal [src]")
+		log_admin("[key_name_admin(usr)] removed station goal [src]")
 		qdel(src)
+		SSuser_verbs.invoke_verb(usr, /datum/user_verb/modify_goals)

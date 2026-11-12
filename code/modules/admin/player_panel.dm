@@ -2,7 +2,11 @@
 /datum/admins/proc/player_panel_new()//The new one
 	if(!usr.client.holder)
 		return
-	var/dat = "<html><head><title>Admin Player Panel</title></head>"
+	// This stops the panel from being invoked by mentors who press F7.
+	if(!check_rights(R_ADMIN))
+		message_admins("[key_name_admin(usr)] attempted to invoke player panel without admin rights. If this is a mentor, its a chance they accidentally hit F7. If this is NOT a mentor, there is a high chance an exploit is being used")
+		return
+	var/dat = "<html><meta charset='utf-8'><head><title>Admin Player Panel</title></head>"
 
 	//javascript, the part that does most of the work~
 	dat += {"
@@ -29,7 +33,7 @@
 
 						var maintable_data = document.getElementById('maintable_data');
 						var ltr = maintable_data.getElementsByTagName("tr");
-						for( var i = 0; i < ltr.length; ++i )
+						for(var i = 0; i < ltr.length; ++i)
 						{
 							try{
 								var tr = ltr\[i\];
@@ -42,7 +46,7 @@
 								var search = lsearch\[0\];
 								//var inner_span = li.getElementsByTagName("span")\[1\] //Should only ever contain one element.
 								//document.write("<p>"+search.innerText+"<br>"+filter+"<br>"+search.innerText.indexOf(filter))
-								if( search.innerText.toLowerCase().indexOf(filter) == -1 )
+								if(search.innerText.toLowerCase().indexOf(filter) == -1)
 								{
 									//document.write("a");
 									//ltr.removeChild(tr);
@@ -61,7 +65,7 @@
 
 				}
 
-				function expand(id,job,name,real_name,image,key,ip,antagonist,ref,eyeref){
+				function expand(id,job,name,real_name,image,key,ip,antagonists,mobUID,client_ckey,eyeUID){
 
 					clearAll();
 
@@ -75,18 +79,20 @@
 
 					body += "</td><td align='center'>";
 
-					body += "<a href='?src=[UID()];adminplayeropts="+ref+"'>PP</a> - "
-					body += "<a href='?src=[UID()];shownoteckey="+key+"'>N</a> - "
-					body += "<a href='?_src_=vars;Vars="+ref+"'>VV</a> - "
-					body += "<a href='?src=[UID()];traitor="+ref+"'>TP</a> - "
-					body += "<a href='?src=[usr.UID()];priv_msg=\ref"+ref+"'>PM</a> - "
-					body += "<a href='?src=[UID()];subtlemessage="+ref+"'>SM</a> - "
-					body += "<a href='?src=[UID()];adminplayerobservefollow="+ref+"'>FLW</a>"
-					if(eyeref)
-						body += "|<a href='?src=[UID()];adminplayerobservefollow="+eyeref+"'>EYE</a>"
+					body += "<a href='byond://?src=[UID()];adminplayeropts="+mobUID+"'>PP</a> - "
+					body += "<a href='byond://?src=[UID()];shownoteckey="+key+"'>N</a> - "
+					body += "<a href='byond://?_src_=vars;Vars="+mobUID+"'>VV</a> - "
+					body += "<a href='byond://?src=[UID()];traitor="+mobUID+"'>TP</a> - "
+					body += "<a href='byond://?src=[usr.UID()];priv_msg="+client_ckey+"'>PM</a> - "
+					body += "<a href='byond://?src=[UID()];subtlemessage="+mobUID+"'>SM</a> - "
+					body += "<a href='byond://?src=[UID()];adminplayerobservefollow="+mobUID+"'>FLW</a> - "
+					body += "<a href='byond://?src=[UID()];adminalert="+mobUID+"'>ALERT</a> - "
+					body += "<a href='byond://?src=[UID()];adminobserve="+mobUID+"'>OBS</a>"
+					if(eyeUID)
+						body += "|<a href='byond://?src=[UID()];adminplayerobservefollow="+eyeUID+"'>EYE</a>"
 					body += "<br>"
-					if(antagonist > 0)
-						body += "<font size='2'><a href='?src=[UID()];check_antagonist=1'><font color='red'><b>Antagonist</b></font></a></font>";
+					if(antagonists)
+						body += "<font size='2'><a href='byond://?src=[UID()];check_antagonist=1'><font color='red'><b>"+antagonists+"</b></font></a></font>";
 
 					body += "</td></tr></table>";
 
@@ -197,7 +203,7 @@
 			<tr id='title_tr'>
 				<td align='center'>
 					<font size='5'><b>Player panel</b></font><br>
-					Hover over a line to see more information | [check_rights(R_ADMIN,0) ? "<a href='?src=[UID()];check_antagonist=1'>Check antagonists</a> | Kick <a href='?_src_=holder;kick_all_from_lobby=1;afkonly=0'>everyone</a>/<a href='?_src_=holder;kick_all_from_lobby=1;afkonly=1'>AFKers</a> in lobby" : "" ]
+					Hover over a line to see more information | [check_rights(R_ADMIN,0) ? "<a href='byond://?src=[UID()];check_antagonist=1'>Check antagonists</a> | Kick <a href='byond://?_src_=holder;kick_all_from_lobby=1;afkonly=0'>everyone</a>/<a href='byond://?_src_=holder;kick_all_from_lobby=1;afkonly=1'>AFKers</a> in lobby" : "" ]
 					<p>
 				</td>
 			</tr>
@@ -219,11 +225,14 @@
 	var/i = 1
 	for(var/mob/M in mobs)
 		if(M.ckey)
+			if(M.client)
+				if(M.client?.holder?.big_brother && !check_rights(R_PERMISSIONS, FALSE))		// normal admins can't see BB
+					continue
 
 			var/color = "#e6e6e6"
 			if(i%2 == 0)
 				color = "#f2f2f2"
-			var/is_antagonist = is_special_character(M)
+			var/antagonist_string = get_antag_type_truncated_plaintext_string(M)
 
 			var/M_job = ""
 
@@ -246,7 +255,7 @@
 						M_job = "Carbon-based"
 
 				else if(issilicon(M)) //silicon
-					if(isAI(M))
+					if(is_ai(M))
 						M_job = "AI"
 					else if(ispAI(M))
 						M_job = "pAI"
@@ -255,7 +264,7 @@
 					else
 						M_job = "Silicon-based"
 
-				else if(isanimal(M)) //simple animals
+				else if(isanimal_or_basicmob(M)) //simple animals
 					if(iscorgi(M))
 						M_job = "Corgi"
 					else
@@ -264,7 +273,7 @@
 				else
 					M_job = "Living"
 
-			else if(istype(M,/mob/new_player))
+			else if(isnewplayer(M))
 				M_job = "New player"
 
 			else if(isobserver(M))
@@ -288,11 +297,12 @@
 			M_key = replacetext(M_key, "\"", "")
 			M_key = replacetext(M_key, "\\", "")
 
-			var/M_eyeref = ""
-			if(isAI(M))
+			var/M_eyeUID = ""
+			if(is_ai(M))
 				var/mob/living/silicon/ai/A = M
 				if(A.client && A.eyeobj) // No point following clientless AI eyes
-					M_eyeref = "\ref[A.eyeobj]"
+					M_eyeUID = "[A.eyeobj.UID()]"
+			var/client_ckey = M.client ? M.client.ckey : null
 			//output for each mob
 			dat += {"
 
@@ -300,7 +310,7 @@
 					<td align='center' bgcolor='[color]'>
 						<span id='notice_span[i]'></span>
 						<a id='link[i]'
-						onmouseover='expand("item[i]","[M_job]","[M_name]","[M_rname]","--unused--","[M_key]","[M.lastKnownIP]",[is_antagonist],"\ref[M]", "[M_eyeref]")'
+						onmouseover='expand("item[i]","[M_job]","[M_name]","[M_rname]","--unused--","[M_key]","[M.lastKnownIP]","[antagonist_string]","[M.UID()]","[client_ckey]","[M_eyeUID]")'
 						>
 						<b id='search[i]'>[M_name] - [M_rname] - [M_key] ([M_job])</b>
 						</a>
@@ -327,134 +337,79 @@
 
 	usr << browse(dat, "window=players;size=600x480")
 
-//The old one
-/datum/admins/proc/player_panel_old()
-	if(!usr.client.holder)
-		return
-	var/dat = "<html><head><title>Player Menu</title></head>"
-	dat += "<body><table border=1 cellspacing=5><B><tr><th>Name</th><th>Real Name</th><th>Assigned Job</th><th>Key</th><th>Options</th><th>PM</th><th>Traitor?</th></tr></B>"
-	//add <th>IP:</th> to this if wanting to add back in IP checking
-	//add <td>(IP: [M.lastKnownIP])</td> if you want to know their ip to the lists below
-	var/list/mobs = sortmobs()
-
-	for(var/mob/M in mobs)
-		if(!M.ckey) continue
-
-		dat += "<tr><td>[M.name]</td>"
-		if(isAI(M))
-			dat += "<td>AI</td>"
-		else if(isrobot(M))
-			dat += "<td>Cyborg</td>"
-		else if(issmall(M))
-			dat += "<td>Monkey</td>"
-		else if(ishuman(M))
-			dat += "<td>[M.real_name]</td>"
-		else if(istype(M, /mob/living/silicon/pai))
-			dat += "<td>pAI</td>"
-		else if(istype(M, /mob/new_player))
-			dat += "<td>New Player</td>"
-		else if(isobserver(M))
-			dat += "<td>Ghost</td>"
-		else if(isalien(M))
-			dat += "<td>Alien</td>"
-		else
-			dat += "<td>Unknown</td>"
-
-
-		if(istype(M,/mob/living/carbon/human))
-			var/mob/living/carbon/human/H = M
-			if(H.mind && H.mind.assigned_role)
-				dat += "<td>[H.mind.assigned_role]</td>"
-		else
-			dat += "<td>NA</td>"
-
-
-		dat += {"<td>[(M.client ? "[M.client]" : "No client")]</td>
-		<td align=center><A HREF='?src=[UID()];adminplayeropts=\ref[M]'>X</A></td>
-		<td align=center><A href='?src=[usr.UID()];priv_msg=\ref[M]'>PM</A></td>
-		"}
-		switch(is_special_character(M))
-			if(0)
-				dat += {"<td align=center><A HREF='?src=[UID()];traitor=\ref[M]'>Traitor?</A></td>"}
-			if(1)
-				dat += {"<td align=center><A HREF='?src=[UID()];traitor=\ref[M]'><font color=red>Traitor?</font></A></td>"}
-			if(2)
-				dat += {"<td align=center><A HREF='?src=[UID()];traitor=\ref[M]'><font color=red><b>Traitor?</b></font></A></td>"}
-
-	dat += "</table></body></html>"
-
-	usr << browse(dat, "window=players;size=640x480")
-
-
 
 /datum/admins/proc/check_antagonists_line(mob/M, caption = "", close = 1)
 	var/logout_status
-	if(istype(M, /mob/living/carbon/human/interactive))
-		logout_status = " <i>(snpc)</i>"
-	else
-		logout_status = M.client ? "" : " <i>(logged out)</i>"
+	logout_status = M.client ? "" : " <i>(logged out)</i>"
 	var/dname = M.real_name
+	var/area/A = get_area(M)
 	if(!dname)
 		dname = M
 
-	return {"<tr><td><a href='?src=[UID()];adminplayeropts=\ref[M]'>[dname]</a><b>[caption]</b>[logout_status][M.stat == 2 ? " <b><font color=red>(DEAD)</font></b>" : ""]</td>
-		<td><A href='?src=[usr.UID()];priv_msg=\ref[M]'>PM</A></td>[close ? "</tr>" : ""]"}
+	return {"<tr><td><a href='byond://?src=[UID()];adminplayeropts=[M.UID()]'>[dname]</a><b>[caption]</b>[logout_status][istype(A, /area/station/security/permabrig) ? "<b><font color=red> (PERMA) </b></font>" : ""][M.stat == DEAD ? " <b><font color=red>(DEAD)</font></b>" : ""]</td>
+		<td><a href='byond://?src=[usr.UID()];priv_msg=[M.client?.ckey]'>PM</a> [ADMIN_FLW(M, "FLW")] [ADMIN_OBS(M, "OBS")] </td>[close ? "</tr>" : ""]"}
 
 /datum/admins/proc/check_antagonists()
-	if(!check_rights(R_ADMIN))	return
-	if(ticker && ticker.current_state >= GAME_STATE_PLAYING)
-		var/dat = "<html><head><title>Round Status</title></head><body><h1><B>Round Status</B></h1>"
-		dat += "Current Game Mode: <B>[ticker.mode.name]</B><BR>"
-		dat += "Round Duration: <B>[round(ROUND_TIME / 36000)]:[add_zero(num2text(ROUND_TIME / 600 % 60), 2)]:[add_zero(num2text(ROUND_TIME / 10 % 60), 2)]</B><BR>"
-		dat += "<B>Emergency shuttle</B><BR>"
-		if(shuttle_master.emergency.mode < SHUTTLE_CALL)
-			dat += "<a href='?src=[UID()];call_shuttle=1'>Call Shuttle</a><br>"
+	if(!check_rights(R_ADMIN))
+		return
+	if(SSticker && SSticker.current_state >= GAME_STATE_PLAYING)
+		var/dat = "<html><meta charset='utf-8'><head><title>Round Status</title></head><body><h1><b>Round Status</b></h1>"
+		dat += "Current Game Mode: <b>[SSticker.mode.name]</b><br>"
+		if(istype(SSticker.mode, /datum/game_mode/dynamic))
+			var/datum/game_mode/dynamic/dynamic = SSticker.mode
+			dat += "Rulesets: <b>[english_list(dynamic.rulesets + dynamic.implied_rulesets)]</b><br>"
+		dat += "Round Duration: <b>[round(ROUND_TIME / 36000)]:[add_zero(num2text(ROUND_TIME / 600 % 60), 2)]:[add_zero(num2text(ROUND_TIME / 10 % 60), 2)]</b><br>"
+		dat += "<b>Emergency shuttle</b><br>"
+		if(SSshuttle.emergency.mode < SHUTTLE_CALL)
+			dat += "<a href='byond://?src=[UID()];call_shuttle=1'>Call Shuttle</a><br>"
 		else
-			var/timeleft = shuttle_master.emergency.timeLeft()
-			if(shuttle_master.emergency.mode < SHUTTLE_DOCKED)
-				dat += "ETA: <a href='?_src_=holder;edit_shuttle_time=1'>[(timeleft / 60) % 60]:[add_zero(num2text(timeleft % 60), 2)]</a><BR>"
-				dat += "<a href='?_src_=holder;call_shuttle=2'>Send Back</a><br>"
+			var/timeleft = SSshuttle.emergency.timeLeft()
+			if(SSshuttle.emergency.mode < SHUTTLE_DOCKED)
+				dat += "ETA: <a href='byond://?_src_=holder;edit_shuttle_time=1'>[seconds_to_full_clock(timeleft)]</a><br>"
+				dat += "<a href='byond://?_src_=holder;call_shuttle=2'>Send Back</a><br>"
 			else
-				dat += "ETA: <a href='?_src_=holder;edit_shuttle_time=1'>[(timeleft / 60) % 60]:[add_zero(num2text(timeleft % 60), 2)]</a><BR>"
+				dat += "ETA: <a href='byond://?_src_=holder;edit_shuttle_time=1'>[seconds_to_full_clock(timeleft)]</a><br>"
 
-		dat += "<a href='?src=[UID()];delay_round_end=1'>[ticker.delay_end ? "End Round Normally" : "Delay Round End"]</a><br>"
-		if(ticker.mode.syndicates.len)
+		dat += "<a href='byond://?src=[UID()];delay_round_end=1'>[SSticker.delay_end ? "End Round Normally" : "Delay Round End"]</a><br>"
+		dat += "<br><b>Antagonist Teams</b><br>"
+		dat += "<a href='byond://?src=[UID()];check_teams=1'>View Teams</a><br>"
+		if(length(SSticker.mode.syndicates))
 			dat += "<br><table cellspacing=5><tr><td><B>Syndicates</B></td><td></td></tr>"
-			for(var/datum/mind/N in ticker.mode.syndicates)
+			for(var/datum/mind/N in SSticker.mode.syndicates)
 				var/mob/M = N.current
 				if(M)
 					dat += check_antagonists_line(M)
 				else
 					dat += "<tr><td><i>Nuclear Operative not found!</i></td></tr>"
 			dat += "</table><br><table><tr><td><B>Nuclear Disk(s)</B></td></tr>"
-			for(var/obj/item/weapon/disk/nuclear/N in poi_list)
+			for(var/obj/item/disk/nuclear/N in GLOB.poi_list)
 				dat += "<tr><td>[N.name], "
 				var/atom/disk_loc = N.loc
-				while(!istype(disk_loc, /turf))
-					if(istype(disk_loc, /mob))
+				while(!isturf(disk_loc))
+					if(ismob(disk_loc))
 						var/mob/M = disk_loc
-						dat += "carried by <a href='?src=[UID()];adminplayeropts=\ref[M]'>[M.real_name]</a> "
-					if(istype(disk_loc, /obj))
+						dat += "carried by <a href='byond://?src=[UID()];adminplayeropts=[M.UID()]'>[M.real_name]</a> "
+					if(isobj(disk_loc))
 						var/obj/O = disk_loc
 						dat += "in \a [O.name] "
 					disk_loc = disk_loc.loc
 				dat += "in [disk_loc.loc] at ([disk_loc.x], [disk_loc.y], [disk_loc.z])</td></tr>"
 			dat += "</table>"
 
-		if(ticker.mode.head_revolutionaries.len || ticker.mode.revolutionaries.len)
+		if(SSticker.mode.rev_team)
 			dat += "<br><table cellspacing=5><tr><td><B>Revolutionaries</B></td><td></td></tr>"
-			for(var/datum/mind/N in ticker.mode.head_revolutionaries)
+			for(var/datum/mind/N in SSticker.mode.head_revolutionaries)
 				var/mob/M = N.current
 				if(!M)
 					dat += "<tr><td><i>Head Revolutionary not found!</i></td></tr>"
 				else
 					dat += check_antagonists_line(M, "(leader)")
-			for(var/datum/mind/N in ticker.mode.revolutionaries)
+			for(var/datum/mind/N in SSticker.mode.revolutionaries)
 				var/mob/M = N.current
 				if(M)
 					dat += check_antagonists_line(M)
 			dat += "</table><table cellspacing=5><tr><td><B>Target(s)</B></td><td></td><td><B>Location</B></td></tr>"
-			for(var/datum/mind/N in ticker.mode.get_living_heads())
+			for(var/datum/mind/N in SSticker.mode.get_living_heads())
 				var/mob/M = N.current
 				if(M)
 					dat += check_antagonists_line(M)
@@ -464,83 +419,113 @@
 					dat += "<tr><td><i>Head not found!</i></td></tr>"
 			dat += "</table>"
 
-		if(GAMEMODE_IS_BLOB)
-			var/datum/game_mode/blob/mode = ticker.mode
-			dat += "<br><table cellspacing=5><tr><td><B>Blob</B></td><td></td><td></td></tr>"
-			dat += "<tr><td><i>Progress: [blobs.len]/[mode.blobwincount]</i></td></tr>"
+		if(length(SSticker.mode.flockminds))
+			dat += check_role_table("Flockminds", SSticker.mode.flockminds)
 
-			for(var/datum/mind/blob in mode.infected_crew)
-				var/mob/M = blob.current
-				if(M)
-					dat += "<tr><td><a href='?_src_=holder;adminplayeropts=\ref[M]'>[M.real_name]</a>[M.client ? "" : " <i>(ghost)</i>"][M.stat == 2 ? " <b><font color=red>(DEAD)</font></b>" : ""]</td>"
-					dat += "<td><A href='?priv_msg=[M.ckey]'>PM</A></td>"
-				else
-					dat += "<tr><td><i>Blob not found!</i></td></tr>"
-			dat += "</table>"
+		if(length(SSticker.mode.blob_overminds))
+			dat += check_role_table("Blob Overminds", SSticker.mode.blob_overminds)
+			dat += "<i>Blob Tiles: [length(GLOB.blobs)]</i>"
 
-		if(ticker.mode.changelings.len)
-			dat += check_role_table("Changelings", ticker.mode.changelings)
+		if(length(SSticker.mode.changelings))
+			dat += check_role_table("Changelings", SSticker.mode.changelings)
 
-		if(ticker.mode.wizards.len)
-			dat += check_role_table("Wizards", ticker.mode.wizards)
+		if(length(SSticker.mode.acolytes))
+			dat += check_role_table("Acolytes", SSticker.mode.acolytes)
 
-		if(ticker.mode.raiders.len)
-			dat += check_role_table("Raiders", ticker.mode.raiders)
+		if(length(SSticker.mode.wizards))
+			dat += check_role_table("Wizards", SSticker.mode.wizards)
 
-		/*if(ticker.mode.ninjas.len)
-			dat += check_role_table("Ninjas", ticker.mode.ninjas)*/
+		if(length(SSticker.mode.apprentices))
+			dat += check_role_table("Apprentices", SSticker.mode.apprentices)
 
-		if(ticker.mode.cult.len)
-			dat += check_role_table("Cultists", ticker.mode.cult, 0)
-			dat += "<br> use <a href='?src=[UID()];cult_mindspeak=[UID()]'>Cult Mindspeak</a>"
-			if(GAMEMODE_IS_CULT)
-				var/datum/game_mode/cult/cult_round = ticker.mode
-				if(!cult_round.narsie_condition_cleared)
-					dat += "<br><a href='?src=[UID()];cult_nextobj=[UID()]'>complete objective (debug)</a>"
+		if(length(SSticker.mode.ninjas))
+			dat += check_role_table("Ninjas", SSticker.mode.ninjas)
 
-		if(ticker.mode.traitors.len)
-			dat += check_role_table("Traitors", ticker.mode.traitors)
+		if(SSticker.mode.cult_team)
+			dat += check_role_table("Cultists", SSticker.mode.cult_team.members)
+			dat += "<a href='byond://?src=[UID()];check_teams=1'>View Cult Team & Controls</a><br>"
 
-		if(ticker.mode.shadows.len)
-			dat += check_role_table("Shadowlings", ticker.mode.shadows)
+		if(length(SSticker.mode.traitors))
+			dat += check_role_table("Traitors", SSticker.mode.traitors)
 
-		if(ticker.mode.shadowling_thralls.len)
-			dat += check_role_table("Shadowling Thralls", ticker.mode.shadowling_thralls)
+		if(length(SSticker.mode.implanted))
+			dat += check_role_table("Mindslaves", SSticker.mode.implanted)
 
-		if(ticker.mode.abductors.len)
-			dat += check_role_table("Abductors", ticker.mode.abductors)
+		if(length(SSticker.mode.abductors))
+			dat += check_role_table("Abductors", SSticker.mode.abductors)
 
-		if(ticker.mode.abductees.len)
-			dat += check_role_table("Abductees", ticker.mode.abductees)
+		if(length(SSticker.mode.abductees))
+			dat += check_role_table("Abductees", SSticker.mode.abductees)
 
-		if(ticker.mode.vampires.len)
-			dat += check_role_table("Vampires", ticker.mode.vampires)
+		if(length(SSticker.mode.vampires))
+			dat += check_role_table("Vampires", SSticker.mode.vampires)
 
-		if(ticker.mode.vampire_enthralled.len)
-			dat += check_role_table("Vampire Thralls", ticker.mode.vampire_enthralled)
+		if(length(SSticker.mode.mindflayers))
+			dat += check_role_table("Mindflayers", SSticker.mode.mindflayers)
 
-		if(ticker.mode.xenos.len)
-			dat += check_role_table("Xenos", ticker.mode.xenos)
+		if(length(SSticker.mode.heretics))
+			dat += check_role_table("Heretics", SSticker.mode.heretics)
 
-		if(ticker.mode.superheroes.len)
-			dat += check_role_table("Superheroes", ticker.mode.superheroes)
+		if(length(SSticker.mode.vampire_enthralled))
+			dat += check_role_table("Vampire Thralls", SSticker.mode.vampire_enthralled)
 
-		if(ticker.mode.supervillains.len)
-			dat += check_role_table("Supervillains", ticker.mode.supervillains)
+		if(length(SSticker.mode.xenos))
+			dat += check_role_table("Xenos", SSticker.mode.xenos)
 
-		if(ticker.mode.greyshirts.len)
-			dat += check_role_table("Greyshirts", ticker.mode.greyshirts)
+		if(length(SSticker.mode.superheroes))
+			dat += check_role_table("Superheroes", SSticker.mode.superheroes)
 
-		if(ts_spiderlist.len)
+		if(length(SSticker.mode.supervillains))
+			dat += check_role_table("Supervillains", SSticker.mode.supervillains)
+
+		if(length(SSticker.mode.greyshirts))
+			dat += check_role_table("Greyshirts", SSticker.mode.greyshirts)
+
+		if(length(SSticker.mode.eventmiscs))
+			dat += check_role_table("Event Roles", SSticker.mode.eventmiscs)
+
+		if(length(SSticker.mode.zombies))
+			dat += check_role_table("Zombies", SSticker.mode.zombies)
+
+		if(length(SSticker.mode.zombie_infected))
+			dat += check_role_table_mob("Pre-zombie infected", SSticker.mode.zombie_infected)
+
+		if(length(SSticker.mode.uplifted_primitives))
+			for(var/datum/species/species_path in SSticker.mode.uplifted_primitives)
+				var/minds = SSticker.mode.uplifted_primitives[species_path]
+				dat += check_role_table("Uplifted Primitives ([species_path::name])", minds)
+
+		if(length(GLOB.ts_spiderlist))
 			var/list/spider_minds = list()
-			for(var/mob/living/simple_animal/hostile/poison/terror_spider/S in ts_spiderlist)
+			for(var/mob/living/simple_animal/hostile/poison/terror_spider/S in GLOB.ts_spiderlist)
 				if(S.ckey)
 					spider_minds += S.mind
-			if(spider_minds.len)
+			if(length(spider_minds))
 				dat += check_role_table("Terror Spiders", spider_minds)
 
-		if(ticker.mode.ert.len)
-			dat += check_role_table("ERT", ticker.mode.ert)
+				var/count_eggs = 0
+				var/count_spiderlings = 0
+				var/count_infected = 0
+				for(var/obj/structure/spider/eggcluster/terror_eggcluster/E in GLOB.ts_egg_list)
+					if(is_station_level(E.z))
+						count_eggs += E.spiderling_number
+				for(var/mob/living/basic/spiderling/terror_spiderling/L in GLOB.ts_spiderling_list)
+					if(!L.stillborn && is_station_level(L.z))
+						count_spiderlings += 1
+				count_infected = length(GLOB.ts_infected_list)
+				dat += "<table cellspacing=5><tr><td>Growing TS on-station: [count_eggs] egg\s, [count_spiderlings] spiderling\s, [count_infected] infected</td></tr></table>"
+
+		if(length(SSticker.mode.ert))
+			dat += check_role_table("ERT", SSticker.mode.ert)
+
+		//list active security force count, so admins know how bad things are
+		var/list/sec_list = check_active_security_force()
+		dat += "<br><table cellspacing=5><tr><td><b>Security</b></td><td></td></tr>"
+		dat += "<tr><td>Total: </td><td>[sec_list[1]]</td>"
+		dat += "<tr><td>Active: </td><td>[sec_list[2]]</td>"
+		dat += "<tr><td>Dead: </td><td>[sec_list[3]]</td>"
+		dat += "<tr><td>Antag: </td><td>[sec_list[4]]</td>"
+		dat += "</table>"
 
 		dat += "</body></html>"
 		usr << browse(dat, "window=roundstatus;size=400x500")
@@ -563,9 +548,16 @@
 	if(show_objectives)
 		txt += {"
 			<td>
-				<a href='?src=[UID()];traitor=\ref[M]'>Show Objective</a>
+				<a href='byond://?src=[UID()];traitor=[M.UID()]'>Show Objective</a>
 			</td>
 		"}
 
 	txt += "</tr>"
+	return txt
+
+/datum/admins/proc/check_role_table_mob(name, list/members, show_objectives=1)
+	var/txt = "<br><table cellspacing=5><tr><td><b>[name]</b></td><td></td></tr>"
+	for(var/mob/M in members)
+		txt += check_role_table_row(M, show_objectives)
+	txt += "</table>"
 	return txt

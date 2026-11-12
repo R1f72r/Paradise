@@ -4,7 +4,7 @@
 ////////////////////////////////////
 
 /obj/mecha/proc/get_stats_html()
-	var/output = {"<html>
+	var/output = {"<html><meta charset='utf-8'>
 						<head><title>[name] data</title>
 						<style>
 						body {color: #00ff00; background: #000000; font-family:"Lucida Console",monospace; font-size: 12px;}
@@ -18,12 +18,12 @@
 						.hidden {display: none;}
 						</style>
 						<script language='javascript' type='text/javascript'>
-						[js_byjax]
-						[js_dropdowns]
+						[JS_BYJAX]
+						[JS_DROPDOWNS]
 						function ticker() {
-						    setInterval(function(){
-						        window.location='byond://?src=[UID()]&update_content=1';
-						    }, 1000);
+							setInterval(function(){
+								window.location='byond://?src=[UID()]&update_content=1';
+							}, 1000);
 						}
 
 						window.onload = function() {
@@ -45,7 +45,7 @@
 						</div>
 						</body>
 						</html>
-					 "}
+					"}
 	return output
 
 
@@ -55,7 +55,7 @@
 										"[MECHA_INT_FIRE]" = "<font color='red'><b>INTERNAL FIRE</b></font>",
 										"[MECHA_INT_TEMP_CONTROL]" = "<font color='red'><b>LIFE SUPPORT SYSTEM MALFUNCTION</b></font>",
 										"[MECHA_INT_TANK_BREACH]" = "<font color='red'><b>GAS TANK BREACH</b></font>",
-										"[MECHA_INT_CONTROL_LOST]" = "<font color='red'><b>COORDINATION SYSTEM CALIBRATION FAILURE</b></font> - <a href='?src=[UID()];repair_int_control_lost=1'>Recalibrate</a>",
+										"[MECHA_INT_CONTROL_LOST]" = "<font color='red'><b>COORDINATION SYSTEM CALIBRATION FAILURE</b></font> - <a href='byond://?src=[UID()];repair_int_control_lost=1'>Recalibrate</a>",
 										"[MECHA_INT_SHORT_CIRCUIT]" = "<font color='red'><b>SHORT CIRCUIT</b></font>"
 										)
 	for(var/tflag in dam_reports)
@@ -63,95 +63,94 @@
 		if(hasInternalDamage(intdamflag))
 			output += dam_reports[tflag]
 			output += "<br />"
-	if(return_pressure() > WARNING_HIGH_PRESSURE)
+	if(cabin_air.return_pressure() > WARNING_HIGH_PRESSURE)
 		output += "<font color='red'><b>DANGEROUSLY HIGH CABIN PRESSURE</b></font><br />"
 	return output
 
 
 /obj/mecha/proc/get_stats_part()
-	var/integrity = health/initial(health)*100
+	var/integrity = obj_integrity/max_integrity*100
 	var/cell_charge = get_charge()
 	var/tank_pressure = internal_tank ? round(internal_tank.return_pressure(),0.01) : "None"
 	var/tank_temperature = internal_tank ? internal_tank.return_temperature() : "Unknown"
-	var/cabin_pressure = round(return_pressure(),0.01)
-	var/output = {"[report_internal_damage()]
-						[integrity<30?"<font color='red'><b>DAMAGE LEVEL CRITICAL</b></font><br>":null]
-						<b>Integrity: </b> [integrity]%<br>
-						<b>Powercell charge: </b>[isnull(cell_charge)?"No powercell installed":"[cell.percent()]%"]<br>
-						<b>Air source: </b>[use_internal_tank?"Internal Airtank":"Environment"]<br>
-						<b>Airtank pressure: </b>[tank_pressure]kPa<br>
-						<b>Airtank temperature: </b>[tank_temperature]&deg;K|[tank_temperature - T0C]&deg;C<br>
-						<b>Cabin pressure: </b>[cabin_pressure>WARNING_HIGH_PRESSURE ? "<font color='red'>[cabin_pressure]</font>": cabin_pressure]kPa<br>
-						<b>Cabin temperature: </b> [return_temperature()]&deg;K|[return_temperature() - T0C]&deg;C<br>
-						<b>Lights: </b>[lights?"on":"off"]<br>
-						[dna?"<b>DNA-locked:</b><br> <span style='font-size:10px;letter-spacing:-1px;'>[dna]</span> \[<a href='?src=[UID()];reset_dna=1'>Reset</a>\]<br>":null]
-					"}
-	return output
+	var/tank_temperature_c = internal_tank ? internal_tank.return_temperature() - T0C : "Unknown"
+	var/cabin_pressure = round(cabin_air.return_pressure(), 0.01)
+	. = "[report_internal_damage()]"
+	. += "[integrity<30?"<font color='red'><b>DAMAGE LEVEL CRITICAL</b></font><br>":null]"
+	. += "<b>Integrity: </b> [integrity]%<br>"
+	. += "<b>Powercell charge: </b>[isnull(cell_charge)?"No powercell installed":"[cell.percent()]%"]<br>"
+	. += "<b>Air source: </b>[use_internal_tank?"Internal Airtank":"Environment"]<br>"
+	. += "<b>Airtank pressure: </b>[tank_pressure]kPa<br>"
+	. += "<b>Airtank temperature: </b>[tank_temperature]&deg;K|[tank_temperature_c]&deg;C<br>"
+	. += "<b>Cabin pressure: </b>[cabin_pressure>WARNING_HIGH_PRESSURE ? "<font color='red'>[cabin_pressure]</font>": cabin_pressure]kPa<br>"
+	. += "<b>Cabin temperature: </b> [cabin_air.temperature()]&deg;K|[cabin_air.temperature() - T0C]&deg;C<br>"
+	. += "<b>Lights: </b>[lights?"on":"off"]<br>"
+	. += "[dna ? "<b>DNA-locked:</b><br> <span style='font-size:10px;letter-spacing:-1px;'>[dna]</span> \[<a href='byond://?src=[UID()];reset_dna=1'>Reset</a>\]<br>" : ""]"
+	. += "[defense_action.owner ? "<b>Defence Mode: </b> [defence_mode ? "Enabled" : "Disabled"]<br>" : ""]"
+	. += "[overload_action.owner ? "<b>Leg Actuators Overload: </b> [leg_overload_mode ? "Enabled" : "Disabled"]<br>" : ""]"
+	. += "[thrusters_action.owner ? "<b>Thrusters: </b> [thrusters_active ? "Enabled" : "Disabled"]<br>" : ""]"
+	. += "[smoke_action.owner ? "<b>Smoke: </b> [smoke]<br>" : ""]"
+	. += "[zoom_action.owner ? "<b>Zoom: </b> [zoom_mode ? "Enabled" : "Disabled"]<br>" : ""]"
+	. += "[phasing_action.owner ? "<b>Phase Modulator: </b> [phasing ? "Enabled" : "Disabled"]<br>" : ""]"
 
 /obj/mecha/proc/get_commands()
-	var/output = {"<div class='wr'>
-						<div class='header'>Electronics</div>
-						<div class='links'>
-						<a href='?src=[UID()];toggle_lights=1'>Toggle Lights</a><br>
-						<b>Radio settings:</b><br>
-						Microphone: <a href='?src=[UID()];rmictoggle=1'><span id="rmicstate">[radio.broadcasting?"Engaged":"Disengaged"]</span></a><br>
-						Speaker: <a href='?src=[UID()];rspktoggle=1'><span id="rspkstate">[radio.listening?"Engaged":"Disengaged"]</span></a><br>
-						Frequency:
-						<a href='?src=[UID()];rfreq=-10'>-</a>
-						<a href='?src=[UID()];rfreq=-2'>-</a>
-						<span id="rfreq">[format_frequency(radio.frequency)]</span>
-						<a href='?src=[UID()];rfreq=2'>+</a>
-						<a href='?src=[UID()];rfreq=10'>+</a><br>
-						</div>
-						</div>
-						<div class='wr'>
-						<div class='header'>Airtank</div>
-						<div class='links'>
-						<a href='?src=[UID()];toggle_airtank=1'>Toggle Internal Airtank Usage</a><br>
-						[(/obj/mecha/verb/disconnect_from_port in verbs)?"<a href='?src=[UID()];port_disconnect=1'>Disconnect from port</a><br>":null]
-						[(/obj/mecha/verb/connect_to_port in verbs)?"<a href='?src=[UID()];port_connect=1'>Connect to port</a><br>":null]
-						</div>
-						</div>
-						<div class='wr'>
-						<div class='header'>Permissions & Logging</div>
-						<div class='links'>
-						<a href='?src=[UID()];toggle_id_upload=1'><span id='t_id_upload'>[add_req_access?"L":"Unl"]ock ID upload panel</span></a><br>
-						<a href='?src=[UID()];toggle_maint_access=1'><span id='t_maint_access'>[maint_access?"Forbid":"Permit"] maintenance protocols</span></a><br>
-						<a href='?src=[UID()];dna_lock=1'>DNA-lock</a><br>
-						<a href='?src=[UID()];view_log=1'>View internal log</a><br>
-						<a href='?src=[UID()];change_name=1'>Change exosuit name</a><br>
-						</div>
-						</div>
-						<div id='equipment_menu'>[get_equipment_menu()]</div>
-						<hr>
-						[(/obj/mecha/verb/eject in verbs)?"<a href='?src=[UID()];eject=1'>Eject</a><br>":null]
-						"}
-	return output
+	. = "<div class='wr'>"
+	. += "<div class='header'>Electronics</div>"
+	. += "<div class='links'>"
+	. += "<a href='byond://?src=[UID()];toggle_lights=1'>Toggle Lights</a><br>"
+	. += "<b>Radio settings:</b><br>"
+	. += "Microphone: <a href='byond://?src=[UID()];rmictoggle=1'><span id='rmicstate'>[radio.broadcasting?"Engaged":"Disengaged"]</span></a><br>"
+	. += "Speaker: <a href='byond://?src=[UID()];rspktoggle=1'><span id='rspkstate'>[radio.listening?"Engaged":"Disengaged"]</span></a><br>"
+	. += "Frequency:"
+	. += "<a href='byond://?src=[UID()];rfreq=-10'>-</a>"
+	. += "<a href='byond://?src=[UID()];rfreq=-2'>-</a>"
+	. += "<span id='rfreq'>[format_frequency(radio.frequency)]</span>"
+	. += "<a href='byond://?src=[UID()];rfreq=2'>+</a>"
+	. += "<a href='byond://?src=[UID()];rfreq=10'>+</a><br>"
+	. += "</div>"
+	. += "</div>"
+	. += "<div class='wr'>"
+	. += "<div class='header'>Airtank</div>"
+	. += "<div class='links'>"
+	. += "<a href='byond://?src=[UID()];toggle_airtank=1'>Toggle Internal Airtank Usage</a><br>"
+	. += "</div>"
+	. += "</div>"
+	. += "<div class='wr'>"
+	. += "<div class='header'>Permissions & Logging</div>"
+	. += "<div class='links'>"
+	. += "<a href='byond://?src=[UID()];toggle_id_upload=1'><span id='t_id_upload'>[add_req_access?"L":"Unl"]ock ID upload panel</span></a><br>"
+	. += "<a href='byond://?src=[UID()];toggle_maint_access=1'><span id='t_maint_access'>[maint_access?"Forbid":"Permit"] maintenance protocols</span></a><br>"
+	. += "<a href='byond://?src=[UID()];dna_lock=1'>DNA-lock</a><br>"
+	. += "<a href='byond://?src=[UID()];view_log=1'>View internal log</a><br>"
+	. += "<a href='byond://?src=[UID()];change_name=1'>Change exosuit name</a><br>"
+	. += "</div>"
+	. += "</div>"
+	. += "<div id='equipment_menu'>[get_equipment_menu()]</div>"
+	. += "<hr>"
+	. += "<a href='byond://?src=[UID()];eject=1'>Eject</a><br>"
 
 /obj/mecha/proc/get_equipment_menu() //outputs mecha html equipment menu
-	var/output
-	if(equipment.len)
-		output += {"<div class='wr'>
-						<div class='header'>Equipment</div>
-						<div class='links'>"}
+	. = ""
+	if(length(equipment))
+		. += "<div class='wr'>"
+		. += "<div class='header'>Equipment</div>"
+		. += "<div class='links'>"
 		for(var/obj/item/mecha_parts/mecha_equipment/W in equipment)
-			output += "[W.name] <a href='?src=[W.UID()];detach=1'>Detach</a><br>"
-		output += "<b>Available equipment slots:</b> [max_equip-equipment.len]"
-		output += "</div></div>"
-	return output
+			. += "[W.name] <a href='byond://?src=[W.UID()];detach=1'>Detach</a><br>"
+		. += "<b>Available equipment slots:</b> [max_equip-length(equipment)]"
+		. += "</div></div>"
 
 /obj/mecha/proc/get_equipment_list() //outputs mecha equipment list in html
-	if(!equipment.len)
+	if(!length(equipment))
 		return
-	var/output = "<b>Equipment:</b><div style=\"margin-left: 15px;\">"
+	. = "<b>Equipment:</b><div style=\"margin-left: 15px;\">"
 	for(var/obj/item/mecha_parts/mecha_equipment/MT in equipment)
-		output += "<div id='\ref[MT]'>[MT.get_equip_info()]</div>"
-	output += "</div>"
-	return output
+		. += "<div id='\ref[MT]'>[MT.get_equip_info()]</div>"
+	. += "</div>"
 
 
 /obj/mecha/proc/get_log_html()
-	var/output = "<html><head><title>[name] Log</title></head><body style='font: 13px 'Courier', monospace;'>"
+	var/output = "<html><meta charset='utf-8'><head><title>[name] Log</title></head><body style='font: 13px 'Courier', monospace;'>"
 	for(var/list/entry in log)
 		output += {"<div style='font-weight: bold;'>[time2text(entry["time"],"DDD MMM DD hh:mm:ss")] 2555</div>
 						<div style='margin-left:15px; margin-bottom:10px;'>[entry["message"]]</div>
@@ -159,10 +158,18 @@
 	output += "</body></html>"
 	return output
 
+/obj/mecha/proc/get_log_tgui()
+	var/list/data = list()
+	for(var/list/entry in log)
+		data.Add(list(list(
+			"time" = time2text(entry["time"], "hh:mm:ss"),
+			"message" = entry["message"],
+		)))
+	return data
 
-/obj/mecha/proc/output_access_dialog(obj/item/weapon/card/id/id_card, mob/user)
+/obj/mecha/proc/output_access_dialog(obj/item/card/id/id_card, mob/user)
 	if(!id_card || !user) return
-	var/output = {"<html>
+	var/output = {"<html><meta charset='utf-8'>
 						<head><style>
 						h1 {font-size:15px;margin-bottom:4px;}
 						body {color: #00ff00; background: #000000; font-family:"Courier New", Courier, monospace; font-size: 12px;}
@@ -172,22 +179,27 @@
 						<body>
 						<h1>Following keycodes are present in this system:</h1>"}
 	for(var/a in operation_req_access)
-		output += "[get_access_desc(a)] - <a href='?src=[UID()];del_req_access=[a];user=\ref[user];id_card=\ref[id_card]'>Delete</a><br>"
+		output += "[get_access_desc(a)] - <a href='byond://?src=[UID()];del_req_access=[a];user=\ref[user];id_card=\ref[id_card]'>Delete</a><br>"
+
+	output += "<a href='byond://?src=[UID()];del_all_req_access=1;user=\ref[user];id_card=\ref[id_card]'><br><b>Delete All</b></a><br>"
+
 	output += "<hr><h1>Following keycodes were detected on portable device:</h1>"
 	for(var/a in id_card.access)
 		if(a in operation_req_access) continue
-		var/a_name = get_access_desc(a)
-		if(!a_name) continue //there's some strange access without a name
-		output += "[a_name] - <a href='?src=[UID()];add_req_access=[a];user=\ref[user];id_card=\ref[id_card]'>Add</a><br>"
-	output += "<hr><a href='?src=[UID()];finish_req_access=1;user=\ref[user]'>Finish</a> <font color='red'>(Warning! The ID upload panel will be locked. It can be unlocked only through Exosuit Interface.)</font>"
+		if(!get_access_desc(a))
+			continue //there's some strange access without a name
+		output += "[get_access_desc(a)] - <a href='byond://?src=[UID()];add_req_access=[a];user=\ref[user];id_card=\ref[id_card]'>Add</a><br>"
+
+	output += "<a href='byond://?src=[UID()];add_all_req_access=1;user=\ref[user];id_card=\ref[id_card]'><br><b>Add All</b></a><br>"
+	output += "<hr><a href='byond://?src=[UID()];finish_req_access=1;user=\ref[user]'>Finish</a> <font color='red'>(Warning! The ID upload panel will be locked. It can be unlocked only through Exosuit Interface.)</font>"
 	output += "</body></html>"
 	user << browse(output, "window=exosuit_add_access")
 	onclose(user, "exosuit_add_access")
 	return
 
-/obj/mecha/proc/output_maintenance_dialog(obj/item/weapon/card/id/id_card,mob/user)
+/obj/mecha/proc/output_maintenance_dialog(obj/item/card/id/id_card,mob/user)
 	if(!id_card || !user) return
-	var/output = {"<html>
+	var/output = {"<html><meta charset='utf-8'>
 						<head>
 						<style>
 						body {color: #00ff00; background: #000000; font-family:"Courier New", Courier, monospace; font-size: 12px;}
@@ -195,9 +207,9 @@
 						</style>
 						</head>
 						<body>
-						[add_req_access?"<a href='?src=[UID()];req_access=1;id_card=\ref[id_card];user=\ref[user]'>Edit operation keycodes</a>":null]
-						[maint_access?"<a href='?src=[UID()];maint_access=1;id_card=\ref[id_card];user=\ref[user]'>Initiate maintenance protocol</a>":null]
-						[(state>0) ?"<a href='?src=[UID()];set_internal_tank_valve=1;user=\ref[user]'>Set Cabin Air Pressure</a>":null]
+						[add_req_access?"<a href='byond://?src=[UID()];req_access=1;id_card=\ref[id_card];user=\ref[user]'>Edit operation keycodes</a>":null]
+						[maint_access?"<a href='byond://?src=[UID()];maint_access=1;id_card=\ref[id_card];user=\ref[user]'>Initiate/Stop maintenance protocol</a>":null]
+						[(state>0) ?"<a href='byond://?src=[UID()];set_internal_tank_valve=1;user=\ref[user]'>Set Cabin Air Pressure</a>":null]
 						</body>
 						</html>"}
 	user << browse(output, "window=exosuit_maint_console")
@@ -217,11 +229,11 @@
 
 /obj/mecha/proc/log_message(message as text,red=null)
 	log.len++
-	log[log.len] = list("time"=world.timeofday,"message"="[red?"<font color='red'>":null][message][red?"</font>":null]")
-	return log.len
+	log[length(log)] = list("time"=world.timeofday,"message"="[red?"<font color='red'>":null][message][red?"</font>":null]")
+	return length(log)
 
 /obj/mecha/proc/log_append_to_last(message as text,red=null)
-	var/list/last_entry = log[log.len]
+	var/list/last_entry = log[length(log)]
 	last_entry["message"] += "<br>[red?"<font color='red'>":null][message][red?"</font>":null]"
 	return
 
@@ -238,21 +250,24 @@
 		return
 	if(href_list["close"])
 		return
-	if(usr.stat > 0)
+	if(usr.stat != CONSCIOUS)
 		return
 	var/datum/topic_input/afilter = new /datum/topic_input(href,href_list)
 	if(href_list["select_equip"])
 		if(usr != occupant)	return
 		var/obj/item/mecha_parts/mecha_equipment/equip = afilter.getObj("select_equip")
-		if(equip)
+		if(equip && (equip in equipment))
+			if(selected)
+				selected.on_unequip()
 			selected = equip
+			selected.on_equip()
 			occupant_message("You switch to [equip]")
 			visible_message("[src] raises [equip]")
-			send_byjax(occupant,"exosuit.browser","eq_list",get_equipment_list())
+			send_byjax(occupant, "exosuit.browser", "eq_list", get_equipment_list())
 		return
 	if(href_list["eject"])
 		if(usr != occupant)	return
-		eject()
+		go_out()
 		return
 	if(href_list["toggle_lights"])
 		if(usr != occupant)	return
@@ -275,18 +290,10 @@
 	if(href_list["rfreq"])
 		if(usr != occupant)	return
 		var/new_frequency = (radio.frequency + afilter.getNum("rfreq"))
-		if((radio.frequency < PUBLIC_LOW_FREQ || radio.frequency > PUBLIC_HIGH_FREQ))
+		if(radio.frequency < PUBLIC_LOW_FREQ || radio.frequency > PUBLIC_HIGH_FREQ)
 			new_frequency = sanitize_frequency(new_frequency)
 		radio.set_frequency(new_frequency)
 		send_byjax(occupant,"exosuit.browser","rfreq","[format_frequency(radio.frequency)]")
-		return
-	if(href_list["port_disconnect"])
-		if(usr != occupant)	return
-		disconnect_from_port()
-		return
-	if(href_list["port_connect"])
-		if(usr != occupant)	return
-		connect_to_port()
 		return
 	if(href_list["view_log"])
 		if(usr != occupant)	return
@@ -298,6 +305,7 @@
 		var/newname = strip_html_simple(input(occupant,"Choose new exosuit name","Rename exosuit",initial(name)) as text, MAX_NAME_LEN)
 		if(newname && trim(newname))
 			name = newname
+			log_game("[key_name(occupant)] has renamed an exosuit [newname]")
 		else
 			alert(occupant, "nope.avi")
 		return
@@ -322,15 +330,19 @@
 		if(!in_range(src, usr))	return
 		var/mob/user = afilter.getMob("user")
 		if(user)
-			if(state==0)
-				state = 1
+			if(state == MECHA_MAINT_OFF)
+				state = MECHA_MAINT_ON
 				to_chat(user, "The securing bolts are now exposed.")
-			else if(state==1)
-				state = 0
+				if(occupant)
+					occupant.throw_alert("locked", /atom/movable/screen/alert/mech_maintenance)
+			else if(state == MECHA_MAINT_ON)
+				state = MECHA_MAINT_OFF
 				to_chat(user, "The securing bolts are now hidden.")
+				if(occupant)
+					occupant.clear_alert("locked")
 			output_maintenance_dialog(afilter.getObj("id_card"),user)
 		return
-	if(href_list["set_internal_tank_valve"] && state >=1)
+	if(href_list["set_internal_tank_valve"] && state >= MECHA_MAINT_ON)
 		if(!in_range(src, usr))	return
 		var/mob/user = afilter.getMob("user")
 		if(user)
@@ -343,9 +355,25 @@
 		operation_req_access += afilter.getNum("add_req_access")
 		output_access_dialog(afilter.getObj("id_card"),afilter.getMob("user"))
 		return
+	if(href_list["add_all_req_access"] && add_req_access && afilter.getObj("id_card"))
+		if(!in_range(src, usr))
+			return
+		var/obj/item/card/id/mycard = afilter.getObj("id_card")
+		var/list/myaccess = mycard.access
+		for(var/a in myaccess)
+			if(get_access_desc(a))
+				operation_req_access += a
+		output_access_dialog(afilter.getObj("id_card"),afilter.getMob("user"))
+		return
 	if(href_list["del_req_access"] && add_req_access && afilter.getObj("id_card"))
 		if(!in_range(src, usr))	return
 		operation_req_access -= afilter.getNum("del_req_access")
+		output_access_dialog(afilter.getObj("id_card"),afilter.getMob("user"))
+		return
+	if(href_list["del_all_req_access"] && add_req_access && afilter.getObj("id_card"))
+		if(!in_range(src, usr))
+			return
+		operation_req_access = list()
 		output_access_dialog(afilter.getObj("id_card"),afilter.getMob("user"))
 		return
 	if(href_list["finish_req_access"])
@@ -358,7 +386,7 @@
 		if(usr != occupant)
 			return
 		if(occupant && !iscarbon(occupant))
-			to_chat(occupant, "<span class='danger'>You do not have any DNA!</span>")
+			to_chat(occupant, SPAN_DANGER("You do not have any DNA!"))
 			return
 		dna = occupant.dna.unique_enzymes
 		occupant_message("You feel a prick as the needle takes your DNA sample.")

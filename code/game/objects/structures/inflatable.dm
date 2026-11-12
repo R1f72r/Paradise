@@ -1,288 +1,278 @@
+// MARK: Wall
 /obj/item/inflatable
 	name = "inflatable wall"
 	desc = "A folded membrane which rapidly expands into a large cubical shape on activation."
 	icon = 'icons/obj/inflatable.dmi'
 	icon_state = "folded_wall"
-	w_class = WEIGHT_CLASS_NORMAL
+	var/structure_type = /obj/structure/inflatable
+	var/torn = FALSE
+	new_attack_chain = TRUE
 
-/obj/item/inflatable/attack_self(mob/user)
+/obj/item/inflatable/examine(mob/user)
+	. = ..()
+	if(!torn)
+		. += SPAN_NOTICE("<b>Use this item in hand</b> to create an inflatable wall.")
+	else
+		. += SPAN_WARNING("[src] is torn and cannot hold air anymore. It's completely useless now.")
+
+
+/obj/item/inflatable/activate_self(mob/user)
+	if(..())
+		return
+
+	inflate(user, user)
+	return ITEM_INTERACT_COMPLETE
+
+/obj/item/inflatable/interact_with_atom(atom/target, mob/living/user, list/modifiers)
+	inflate(user, target)
+	return ITEM_INTERACT_COMPLETE
+
+/obj/item/inflatable/proc/inflate(mob/user, atom/target)
+	if(torn)
+		add_fingerprint(user)
+		to_chat(user, SPAN_WARNING("[src] is torn and cannot be inflated anymore!"))
+		return
+
+	var/turf/T = get_turf(target)
+	if(iswallturf(T))
+		return
+
+	if((locate(/obj/structure/inflatable) in T) || (locate(/obj/structure/window/full) in T))
+		to_chat(user, SPAN_WARNING("There's no room to deploy [src] here!"))
+		return
+
+	var/obj/machinery/door/airlock = locate(/obj/machinery/door) in T
+	var/obj/structure/mineral_door/mineral_door = locate(/obj/structure/mineral_door) in T
+	if(mineral_door && mineral_door.density)
+		to_chat(user, SPAN_WARNING("You need to open [mineral_door] before you can deploy [src] there!"))
+		return
+
+	if(airlock && airlock.density && !istype(airlock, /obj/machinery/door/window))
+		to_chat(user, SPAN_WARNING("You need to open [airlock] before you can deploy [src] there!"))
+		return
+
 	playsound(loc, 'sound/items/zip.ogg', 75, 1)
-	to_chat(user, "<span class='notice'>You inflate [src].</span>")
-	var/obj/structure/inflatable/R = new /obj/structure/inflatable(user.loc)
+	to_chat(user, SPAN_NOTICE("You inflate [src]."))
+	var/obj/structure/inflatable/R = new structure_type(T)
 	src.transfer_fingerprints_to(R)
 	R.add_fingerprint(user)
-	qdel(src)
+	if(!isrobot(loc))
+		qdel(src)
+
+/obj/item/inflatable/torn
+	name = "torn inflatable wall"
+	icon_state = "folded_wall_torn"
+	torn = TRUE
 
 /obj/structure/inflatable
 	name = "inflatable wall"
 	desc = "An inflated membrane. Do not puncture."
-	density = 1
-	anchored = 1
-	opacity = 0
-
+	density = TRUE
+	anchored = TRUE
+	max_integrity = 50
 	icon = 'icons/obj/inflatable.dmi'
 	icon_state = "wall"
+	var/torn = /obj/item/inflatable/torn
+	var/intact = /obj/item/inflatable
 
-	var/health = 50.0
+/obj/structure/inflatable/examine(mob/user)
+	. = ..()
+	. += SPAN_NOTICE("<b>Alt-Click</b> to deflate [src].")
 
-/obj/structure/inflatable/initialize(location)
-	..()
-	air_update_turf(1)
+/obj/structure/inflatable/Initialize(mapload, location)
+	. = ..()
+	recalculate_atmos_connectivity()
 
 /obj/structure/inflatable/Destroy()
-	air_update_turf(1)
-	return ..()
+	var/turf/T = get_turf(src)
+	. = ..()
+	T.recalculate_atmos_connectivity()
 
-/obj/structure/inflatable/CanPass(atom/movable/mover, turf/target, height=0)
-	return 0
+/obj/structure/inflatable/CanPass(atom/movable/mover, border_dir)
+	return
 
-/obj/structure/inflatable/CanAtmosPass(turf/T)
+/obj/structure/inflatable/CanAtmosPass(direction)
 	return !density
 
-/obj/structure/inflatable/bullet_act(var/obj/item/projectile/Proj)
-	health -= Proj.damage
-	..()
-	if(health <= 0)
-		deflate(1)
-	return
-
-/obj/structure/inflatable/ex_act(severity)
-	switch(severity)
-		if(1.0)
-			qdel(src)
-			return
-		if(2.0)
-			deflate(1)
-			return
-		if(3.0)
-			if(prob(50))
-				deflate(1)
-				return
-
-/obj/structure/inflatable/blob_act()
-	deflate(1)
-
-/obj/structure/inflatable/attack_hand(mob/user as mob)
+/obj/structure/inflatable/attack_hand(mob/user)
 	add_fingerprint(user)
-	return
 
-/obj/structure/inflatable/proc/attack_generic(mob/user as mob, damage = 0)	//used by attack_alien, attack_animal, and attack_slime
-	health -= damage
-	if(health <= 0)
-		user.visible_message("<span class='danger'>[user] tears open [src]!</span>")
-		deflate(1)
-	else	//for nicer text~
-		user.visible_message("<span class='danger'>[user] tears at [src]!</span>")
+/obj/structure/inflatable/item_interaction(mob/living/user, obj/item/used, list/modifiers)
+	if(!used.sharp && !is_type_in_typecache(used, GLOB.pointed_types))
+		return ..()
 
-/obj/structure/inflatable/attack_alien(mob/user as mob)
-	if(islarva(user))
-		return
-	attack_generic(user, 15)
-
-/obj/structure/inflatable/attack_animal(mob/user as mob)
-	if(!isanimal(user))
-		return
-	var/mob/living/simple_animal/M = user
-	if(M.melee_damage_upper <= 0)
-		return
-	attack_generic(M, M.melee_damage_upper)
-
-/obj/structure/inflatable/attack_slime(mob/user as mob)
-	var/mob/living/carbon/slime/S = user
-	if(!S.is_adult)
-		return
-	attack_generic(user, rand(10, 15))
-
-/obj/structure/inflatable/attackby(obj/item/weapon/W as obj, mob/user as mob, params)
-	if(!istype(W))
-		return
-	if(is_pointed(W))
-		visible_message("<span class='danger'>[user] pierces [src] with [W]!</span>")
-		deflate(1)
-	if(W.damtype == BRUTE || W.damtype == BURN)
-		hit(W.force)
-		..()
-	return
-
-/obj/structure/inflatable/proc/hit(var/damage, var/sound_effect = 1)
-	health = max(0, health - damage)
-	if(sound_effect)
-		playsound(loc, 'sound/effects/Glasshit.ogg', 75, 1)
-	if(health <= 0)
-		deflate(1)
+	user.do_attack_animation(src, used_item = used)
+	deconstruct(FALSE)
+	return ITEM_INTERACT_COMPLETE
 
 /obj/structure/inflatable/AltClick()
 	if(usr.stat || usr.restrained())
 		return
+
 	if(!Adjacent(usr))
 		return
-	deflate()
 
-/obj/structure/inflatable/proc/deflate(var/violent=0)
+	deconstruct(TRUE)
+
+/obj/structure/inflatable/deconstruct(disassembled = TRUE)
 	playsound(loc, 'sound/machines/hiss.ogg', 75, 1)
-	if(violent)
+	if(!disassembled)
 		visible_message("[src] rapidly deflates!")
-		var/obj/item/inflatable/torn/R = new /obj/item/inflatable/torn(loc)
-		src.transfer_fingerprints_to(R)
+		var/obj/item/inflatable/torn/R = new torn(loc)
+		transfer_fingerprints_to(R)
 		qdel(src)
 	else
 		visible_message("[src] slowly deflates.")
-		spawn(50)
-			var/obj/item/inflatable/R = new /obj/item/inflatable(loc)
-			src.transfer_fingerprints_to(R)
-			qdel(src)
+		addtimer(CALLBACK(src, PROC_REF(deflate)), 5 SECONDS)
 
-/obj/structure/inflatable/verb/hand_deflate()
-	set name = "Deflate"
-	set category = "Object"
-	set src in oview(1)
-
-	if(usr.stat || usr.restrained())
-		return
-
-	deflate()
-
-/obj/item/inflatable/door
-	name = "inflatable door"
-	desc = "A folded membrane which rapidly expands into a simple door on activation."
-	icon = 'icons/obj/inflatable.dmi'
-	icon_state = "folded_door"
-
-/obj/item/inflatable/door/attack_self(mob/user)
-	playsound(loc, 'sound/items/zip.ogg', 75, 1)
-	to_chat(user, "<span class='notice'>You inflate [src].</span>")
-	var/obj/structure/inflatable/door/R = new /obj/structure/inflatable/door(user.loc)
-	src.transfer_fingerprints_to(R)
-	R.add_fingerprint(user)
+/obj/structure/inflatable/proc/deflate()
+	var/obj/item/inflatable/R = new intact(loc)
+	transfer_fingerprints_to(R)
 	qdel(src)
 
-/obj/structure/inflatable/door //Based on mineral door code
+// MARK: Door
+/obj/item/inflatable/door
 	name = "inflatable door"
-	density = 1
-	anchored = 1
-	opacity = 0
+	desc = "A folded membrane which rapidly expands into a simple airtight door on activation."
+	icon_state = "folded_door"
+	structure_type = /obj/structure/inflatable/door
 
-	icon = 'icons/obj/inflatable.dmi'
+/obj/item/inflatable/door/torn
+	name = "torn inflatable door"
+	icon_state = "folded_door_torn"
+	torn = TRUE
+
+/// Based on mineral door code
+/obj/structure/inflatable/door
+	name = "inflatable door"
 	icon_state = "door_closed"
+	torn = /obj/item/inflatable/door/torn
+	intact = /obj/item/inflatable/door
 
-	var/state = 0 //closed, 1 == open
-	var/isSwitchingStates = 0
+	var/state_open = FALSE
+	var/is_operating = FALSE
 
-/obj/structure/inflatable/door/attack_ai(mob/user as mob) //those aren't machinery, they're just big fucking slabs of a mineral
-	if(isAI(user)) //so the AI can't open it
+/obj/structure/inflatable/door/attack_ai(mob/user as mob)
+	if(is_ai(user)) // The AI can't open it.
 		return
-	else if(isrobot(user)) //but cyborgs can
-		if(get_dist(user,src) <= 1) //not remotely though
-			return TryToSwitchState(user)
+
+	if(isrobot(user) && Adjacent(user)) // Cyborgs can, but not remotely.
+		return try_to_operate(user)
+
+/obj/structure/inflatable/door/attack_ghost(mob/user)
+	if(user.can_advanced_admin_interact())
+		operate()
 
 /obj/structure/inflatable/door/attack_hand(mob/user as mob)
-	return TryToSwitchState(user)
+	return try_to_operate(user)
 
-/obj/structure/inflatable/door/CanPass(atom/movable/mover, turf/target, height=0)
+/obj/structure/inflatable/door/CanPass(atom/movable/mover, border_dir)
 	if(istype(mover, /obj/effect/beam))
 		return !opacity
 	return !density
 
-/obj/structure/inflatable/door/CanAtmosPass(turf/T)
+/obj/structure/inflatable/door/CanAtmosPass(direction)
 	return !density
 
-/obj/structure/inflatable/door/proc/TryToSwitchState(atom/user)
-	if(isSwitchingStates)
+/obj/structure/inflatable/door/proc/try_to_operate(atom/user)
+	if(is_operating)
 		return
+
+	if(ismecha(user))
+		operate()
+		return
+
 	if(ismob(user))
 		var/mob/M = user
-		if(world.time - user.last_bumped <= 60)
-			return //NOTE do we really need that?
-		if(M.client)
-			if(iscarbon(M))
-				var/mob/living/carbon/C = M
-				if(!C.handcuffed)
-					SwitchState()
-			else
-				SwitchState()
-	else if(istype(user, /obj/mecha))
-		SwitchState()
+		if(!M.client)
+			operate()
+			return
 
-/obj/structure/inflatable/door/proc/SwitchState()
-	if(state)
-		Close()
+		if(!iscarbon(M))
+			operate()
+			return
+
+		var/mob/living/carbon/C = M
+		if(!C.handcuffed)
+			operate()
+
+/obj/structure/inflatable/door/proc/operate()
+	is_operating = TRUE
+	//playsound(loc, 'sound/effects/stonedoor_openclose.ogg', 100, 1)
+	if(!state_open)
+		flick("door_opening",src)
 	else
-		Open()
-	air_update_turf(1)
-
-/obj/structure/inflatable/door/proc/Open()
-	isSwitchingStates = 1
-	//playsound(loc, 'sound/effects/stonedoor_openclose.ogg', 100, 1)
-	flick("door_opening",src)
+		flick("door_closing",src)
 	sleep(10)
-	density = 0
-	opacity = 0
-	state = 1
-	update_icon()
-	isSwitchingStates = 0
+	density = !density
+	state_open = !state_open
+	update_icon(UPDATE_ICON_STATE)
+	is_operating = FALSE
+	recalculate_atmos_connectivity()
 
-/obj/structure/inflatable/door/proc/Close()
-	isSwitchingStates = 1
-	//playsound(loc, 'sound/effects/stonedoor_openclose.ogg', 100, 1)
-	flick("door_closing",src)
-	sleep(10)
-	density = 1
-	opacity = 0
-	state = 0
-	update_icon()
-	isSwitchingStates = 0
-
-/obj/structure/inflatable/door/update_icon()
-	if(state)
+/obj/structure/inflatable/door/update_icon_state()
+	if(state_open)
 		icon_state = "door_open"
 	else
 		icon_state = "door_closed"
 
-/obj/structure/inflatable/door/deflate(var/violent=0)
-	playsound(loc, 'sound/machines/hiss.ogg', 75, 1)
-	if(violent)
-		visible_message("[src] rapidly deflates!")
-		var/obj/item/inflatable/door/torn/R = new /obj/item/inflatable/door/torn(loc)
-		src.transfer_fingerprints_to(R)
-		qdel(src)
-	else
-		visible_message("[src] slowly deflates.")
-		spawn(50)
-			var/obj/item/inflatable/door/R = new /obj/item/inflatable/door(loc)
-			src.transfer_fingerprints_to(R)
-			qdel(src)
-	air_update_turf(1)
+// MARK: Robot Module
+/obj/item/inflatable/cyborg
+	var/power_cost = 400
+	/// How long it takes to inflate.
+	var/delay = 1 SECONDS
 
-/obj/item/inflatable/torn
-	name = "torn inflatable wall"
-	desc = "A folded membrane which rapidly expands into a large cubical shape on activation. It is too torn to be usable."
-	icon = 'icons/obj/inflatable.dmi'
-	icon_state = "folded_wall_torn"
+/obj/item/inflatable/cyborg/door
+	name = "inflatable door"
+	desc = "A folded membrane which rapidly expands into a simple door on activation."
+	icon_state = "folded_door"
+	power_cost = 600
+	structure_type = /obj/structure/inflatable/door
 
-/obj/item/inflatable/torn/attack_self(mob/user)
-	to_chat(user, "<span class='warning'>The inflatable wall is too torn to be inflated!</span>")
-	add_fingerprint(user)
+/obj/item/inflatable/cyborg/examine(mob/user)
+	. = ..()
+	. += SPAN_NOTICE("As a synthetic, you will synthesise these directly from your cell's energy reserves.")
 
-/obj/item/inflatable/door/torn
-	name = "torn inflatable door"
-	desc = "A folded membrane which rapidly expands into a simple door on activation. It is too torn to be usable."
-	icon = 'icons/obj/inflatable.dmi'
-	icon_state = "folded_door_torn"
+/obj/item/inflatable/cyborg/activate_self(mob/user)
+	if(!do_after(user, delay, FALSE, user))
+		return ITEM_INTERACT_COMPLETE
 
-/obj/item/inflatable/door/torn/attack_self(mob/user)
-	to_chat(user, "<span class='warning'>The inflatable door is too torn to be inflated!</span>")
-	add_fingerprint(user)
+	if(!useResource(user))
+		return ITEM_INTERACT_COMPLETE
 
-/obj/item/weapon/storage/briefcase/inflatable
+	return ..()
+
+/obj/item/inflatable/cyborg/interact_with_atom(atom/target, mob/living/user, list/modifiers)
+	if(!do_after(user, delay, FALSE, target))
+		return ITEM_INTERACT_COMPLETE
+
+	if(!useResource(user))
+		return ITEM_INTERACT_COMPLETE
+
+	return ..()
+
+/obj/item/inflatable/cyborg/proc/useResource(mob/user)
+	if(!isrobot(user))
+		return FALSE
+
+	var/mob/living/silicon/robot/R = user
+	if(R.cell.charge < power_cost)
+		to_chat(user, SPAN_WARNING("Not enough power!"))
+		return FALSE
+
+	return R.cell.use(power_cost)
+
+// MARK: Briefcase
+/obj/item/storage/briefcase/inflatable
 	name = "inflatable barrier box"
 	desc = "Contains inflatable walls and doors."
 	icon_state = "inf_box"
-	item_state = "syringe_kit"
-	max_combined_w_class = 21
+	inhand_icon_state = "syringe_kit"
 	w_class = WEIGHT_CLASS_NORMAL
+	can_hold = list(/obj/item/inflatable)
+	materials = list(MAT_METAL = 2000, MAT_GLASS = 500)
 
-/obj/item/weapon/storage/briefcase/inflatable/New()
-	..()
+/obj/item/storage/briefcase/inflatable/populate_contents()
 	new /obj/item/inflatable/door(src)
 	new /obj/item/inflatable/door(src)
 	new /obj/item/inflatable/door(src)

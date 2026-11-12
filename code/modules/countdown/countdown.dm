@@ -5,22 +5,22 @@
 		And maybe we'll come back\n\
 		To earth, who can tell?"
 
+	invisibility = INVISIBILITY_HIGH
+	layer = MASSIVE_OBJ_LAYER
+	color = "#ff0000" // text color
+	var/text_size = 3 // larger values clip when the displayed text is larger than 2 digits.
+	var/started = FALSE
 	var/displayed_text
 	var/atom/attached_to
-	color = "#ff0000"
-	var/text_size = 4
-	var/started = FALSE
-	invisibility = INVISIBILITY_OBSERVER
-	anchored = TRUE
-	layer = GHOST_LAYER
 
-/obj/effect/countdown/New(atom/A)
+/obj/effect/countdown/Initialize(mapload)
 	. = ..()
-	attach(A)
+	attach(loc)
+	RegisterSignal(attached_to, COMSIG_MOVABLE_MOVED, PROC_REF(countdown_on_move))
 
 /obj/effect/countdown/examine(mob/user)
 	. = ..()
-	to_chat(user, "This countdown is displaying: [displayed_text]")
+	. += "This countdown is displaying: [displayed_text]."
 
 /obj/effect/countdown/proc/attach(atom/A)
 	attached_to = A
@@ -28,39 +28,50 @@
 
 /obj/effect/countdown/proc/start()
 	if(!started)
-		fast_processing += src
+		START_PROCESSING(SSfastprocess, src)
 		started = TRUE
 
 /obj/effect/countdown/proc/stop()
 	if(started)
 		maptext = null
-		fast_processing -= src
+		STOP_PROCESSING(SSfastprocess, src)
 		started = FALSE
 
+/// Get the value from our atom
 /obj/effect/countdown/proc/get_value()
-	// Get the value from our atom
 	return
 
-/obj/effect/countdown/process()
-	if(!attached_to || qdeleted(attached_to))
-		qdel(src)
+/obj/effect/countdown/proc/countdown_on_move()
+	SIGNAL_HANDLER
 	forceMove(get_turf(attached_to))
+
+/obj/effect/countdown/process()
+	if(!attached_to || QDELETED(attached_to))
+		qdel(src)
+	if(!isturf(attached_to.loc)) // When in crates, lockers, etc. countdown_on_move wont be called. This is our backup
+		forceMove(get_turf(attached_to))
 	var/new_val = get_value()
 	if(new_val == displayed_text)
 		return
 	displayed_text = new_val
 
 	if(displayed_text)
-		maptext = "<font size = [text_size]>[displayed_text]</font>"
+		maptext = "<font face='Small Fonts' size=[text_size]>[displayed_text]</font>"
 	else
 		maptext = null
 
 /obj/effect/countdown/Destroy()
 	attached_to = null
-	fast_processing -= src
+	STOP_PROCESSING(SSfastprocess, src)
 	return ..()
 
 /obj/effect/countdown/ex_act(severity) //immune to explosions
+	return
+
+/obj/effect/countdown/singularity_pull()
+	return
+
+/obj/effect/countdown/singularity_act()
 	return
 
 /obj/effect/countdown/syndicatebomb
@@ -81,6 +92,36 @@
 	var/obj/machinery/clonepod/C = attached_to
 	if(!istype(C))
 		return
-	else if(C.occupant)
-		var/completion = round(C.get_completion())
-		return completion
+
+	return C.clone_progress
+
+/obj/effect/countdown/supermatter
+	name = "supermatter damage"
+	text_size = 1
+	color = "#00ff80"
+
+/obj/effect/countdown/supermatter/get_value()
+	var/obj/machinery/atmospherics/supermatter_crystal/S = attached_to
+	if(!istype(S))
+		return
+	return "<div align='center' valign='middle' style='position:relative; top:0px; left:0px'>[round(S.get_integrity(), 1)]%</div>"
+
+/obj/effect/countdown/anomaly
+	name = "anomaly countdown"
+
+/obj/effect/countdown/anomaly/get_value()
+	var/obj/effect/anomaly/A = attached_to
+	if(!istype(A))
+		return
+	var/time_left = max(0, (A.death_time - world.time) / 10)
+	return round(time_left)
+
+/obj/effect/countdown/flock
+	name = "flock relay countdown"
+	text_size = 1
+
+/obj/effect/countdown/flock/get_value()
+	var/obj/structure/flock/relay/R = attached_to
+	if(!istype(R))
+		return
+	return "<div align='center' valign='middle' style='position:relative; top:0px; left:0px'>[round_down((R.started_time + R.win_time - world.time) / 10)]</div>"

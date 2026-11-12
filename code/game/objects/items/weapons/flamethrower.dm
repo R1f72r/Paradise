@@ -1,222 +1,319 @@
-/obj/item/weapon/flamethrower
+/obj/item/flamethrower
 	name = "flamethrower"
 	desc = "You are a firestarter!"
 	icon = 'icons/obj/flamethrower.dmi'
 	icon_state = "flamethrowerbase"
-	item_state = "flamethrower_0"
+	inhand_icon_state = "flamethrower_0"
 	lefthand_file = 'icons/mob/inhands/guns_lefthand.dmi'
 	righthand_file = 'icons/mob/inhands/guns_righthand.dmi'
 	flags = CONDUCT
-	force = 3.0
-	throwforce = 10.0
+	force = 3
+	throwforce = 10
 	throw_speed = 1
 	throw_range = 5
-	w_class = WEIGHT_CLASS_NORMAL
-	materials = list(MAT_METAL=500)
+	materials = list(MAT_METAL = 5000)
+	resistance_flags = FIRE_PROOF
 	origin_tech = "combat=1;plasmatech=2;engineering=2"
-	var/status = 0
-	var/lit = 0	//on or off
-	var/operating = 0//cooldown
-	var/turf/previousturf = null
-	var/obj/item/weapon/weldingtool/weldtool = null
-	var/obj/item/device/assembly/igniter/igniter = null
-	var/obj/item/weapon/tank/plasma/ptank = null
+	var/status = FALSE
+	var/lit = FALSE	//on or off
+	var/operating = FALSE//cooldown
+	var/obj/item/weldingtool/weldtool = null
+	var/obj/item/assembly/igniter/igniter = null
+	var/obj/item/tank/internals/plasma/ptank = null
+	var/warned_admins = FALSE //for the message_admins() when lit
+	//variables for prebuilt flamethrowers
+	var/create_full = FALSE
+	var/create_with_tank = FALSE
+	var/igniter_type = /obj/item/assembly/igniter
+	new_attack_chain = TRUE
 
-
-/obj/item/weapon/flamethrower/Destroy()
+/obj/item/flamethrower/Destroy()
 	QDEL_NULL(weldtool)
 	QDEL_NULL(igniter)
 	QDEL_NULL(ptank)
-	previousturf = null
 	return ..()
 
-
-/obj/item/weapon/flamethrower/process()
-	if(!lit)
-		processing_objects.Remove(src)
+/obj/item/flamethrower/process()
+	if(!lit || !igniter)
+		STOP_PROCESSING(SSobj, src)
 		return null
 	var/turf/location = loc
-	if(istype(location, /mob/))
+	if(ismob(location))
 		var/mob/M = location
-		if(M.l_hand == src || M.r_hand == src)
+		if(M.is_holding(src))
 			location = M.loc
 	if(isturf(location)) //start a fire if possible
-		location.hotspot_expose(700, 2)
-	return
+		igniter.flamethrower_process(location)
 
+/obj/item/flamethrower/update_icon_state()
+	inhand_icon_state = "flamethrower_[lit]"
+	if(ismob(loc))
+		var/mob/M = loc
+		M.update_inv_l_hand()
+		M.update_inv_r_hand()
 
-/obj/item/weapon/flamethrower/update_icon()
-	overlays.Cut()
+/obj/item/flamethrower/update_overlays()
+	. = ..()
 	if(igniter)
-		overlays += "+igniter[status]"
+		. += "+igniter[status]"
 	if(ptank)
-		overlays += "+ptank"
+		. += "+ptank"
 	if(lit)
-		overlays += "+lit"
-		item_state = "flamethrower_1"
+		. += "+lit"
+
+/obj/item/flamethrower/can_enter_storage(obj/item/storage/S, mob/user)
+	if(lit)
+		to_chat(user, SPAN_WARNING("[S] can't hold [src] while it's lit!"))
+		return FALSE
 	else
-		item_state = "flamethrower_0"
-	return
+		return TRUE
 
-/obj/item/weapon/flamethrower/afterattack(atom/target, mob/user, flag)
-	if(flag) return // too close
-	// Make sure our user is still holding us
-	if(user && user.is_in_active_hand(src))
-		var/turf/target_turf = get_turf(target)
-		if(target_turf)
-			var/turflist = getline(user, target_turf)
-			add_logs(user, target, "flamethrowered", addition="at [target.x],[target.y],[target.z]")
-			flame_turf(turflist)
+/obj/item/flamethrower/interact_with_atom(atom/target, mob/living/user, list/modifiers)
+	if(!cigarette_lighter_act(user, target))
+		return NONE
+	return ITEM_INTERACT_COMPLETE
 
-/obj/item/weapon/flamethrower/attackby(obj/item/W as obj, mob/user as mob, params)
-	if(user.stat || user.restrained() || user.lying)	return
-	if(iswrench(W) && !status)//Taking this apart
-		var/turf/T = get_turf(src)
-		if(weldtool)
-			weldtool.loc = T
-			weldtool = null
+/obj/item/flamethrower/cigarette_lighter_act(mob/living/user, mob/living/target, obj/item/direct_attackby_item)
+	var/obj/item/clothing/mask/cigarette/cig = ..()
+	if(!cig)
+		return !isnull(cig)
+
+	if(!lit)
+		to_chat(user, SPAN_WARNING("You need to ignite [src] before you can use it as a lighter!"))
+		return TRUE
+
+	// Pulling this off 'safely' requires years of experience, a true badass, or blind luck!
+	if(HAS_TRAIT(user, TRAIT_BADASS) || (user.mind.assigned_role in list("Station Engineer", "Chief Engineer", "Life Support Specialist")) || prob(50))
+		if(user == target)
+			user.visible_message(
+				SPAN_WARNING("[user] confidently lifts up [src] and releases a big puff of flame at [user.p_their()] [cig] to light it, like some kind of psychopath!"),
+				SPAN_NOTICE("You lift up [src] and lightly pull the trigger, lighting [cig]."),
+				SPAN_WARNING("You hear a brief burst of flame!")
+			)
+		else
+			user.visible_message(
+				SPAN_WARNING("[user] confidently lifts up [src] and releases a big puff of flame at [target], lighting [target.p_their()] [cig.name], like some kind of psychopath!"),
+				SPAN_NOTICE("You lift up [src] and point it at [target], lightly pullling the trigger to light [target.p_their()] [cig.name] with a big puff of flame."),
+				SPAN_WARNING("You hear a brief burst of flame!")
+		)
+	else
+		// You set them on fire, but at least the cigarette got lit...
+		if(target == user)
+			user.visible_message(
+				SPAN_DANGER("[user] carelessly lifts up [src] and releases a large burst of flame at [user.p_their()] [cig] to light it, accidentally setting [user.p_themselves()] ablaze in the process!"),
+				SPAN_USERDANGER("You lift up [src] and squeeze the trigger to light [cig]. Unfortunately, you squeeze a little too hard and release a large burst of flame that sets you ablaze!"),
+				SPAN_DANGER("You hear a plume of fire and something igniting!")
+			)
+		else
+			user.visible_message(
+				SPAN_DANGER("[user] carelessly lifts up [src] and releases a large burst of flame at [target] to light [target.p_their()] [cig.name], accidentally setting [target.p_them()] ablaze!"),
+				SPAN_DANGER("You lift up [src] up and point it at [target], squeezing the trigger to light [target.p_their()] [cig.name]. Unfortunately, your squeeze a little too hard and release large burst of flame that sets [target.p_them()] ablaze!"),
+				SPAN_DANGER("You hear a plume of fire and something igniting!")
+			)
+		target.adjust_fire_stacks(2)
+		target.IgniteMob()
+	cig.light(user, target)
+	return TRUE
+
+/obj/item/flamethrower/ranged_interact_with_atom(atom/target, mob/living/user, list/modifiers)
+	if(user.Adjacent(target))
+		return ..() // Too close.
+	if(user.mind?.martial_art?.no_guns)
+		to_chat(user, SPAN_WARNING("[user.mind.martial_art.no_guns_message]"))
+		return ITEM_INTERACT_COMPLETE
+	if(HAS_TRAIT(user, TRAIT_CHUNKYFINGERS))
+		to_chat(user, SPAN_WARNING("Your meaty finger is far too large for the trigger guard!"))
+		return ITEM_INTERACT_COMPLETE
+	var/turf/target_turf = get_turf(target)
+	if(target_turf)
+		var/turflist = get_line(user, target_turf)
+		add_attack_logs(user, target, "Flamethrowered at [target.x],[target.y],[target.z]")
+		flame_turf(turflist)
+	add_fingerprint(user)
+	return ITEM_INTERACT_COMPLETE
+
+/obj/item/flamethrower/item_interaction(mob/living/user, obj/item/used, list/modifiers)
+	if(!isigniter(used) && !istype(used, /obj/item/tank/internals/plasma))
+		return ..()
+
+	if(isigniter(used))
+		var/obj/item/assembly/igniter/new_igniter = used
+		if(new_igniter.secured)
+			to_chat(user, SPAN_WARNING("[new_igniter] is secured and cannot be attached! Loosen it with a screwdriver."))
+			return ITEM_INTERACT_COMPLETE
 		if(igniter)
-			igniter.loc = T
-			igniter = null
-		if(ptank)
-			ptank.loc = T
-			ptank = null
-		new /obj/item/stack/rods(T)
-		qdel(src)
-		return
-
-	if(isscrewdriver(W) && igniter && !lit)
-		status = !status
-		to_chat(user, "<span class='notice'>[igniter] is now [status ? "secured" : "unsecured"]!</span>")
+			to_chat(user, SPAN_WARNING("[src] already has an igniter installed!"))
+			return ITEM_INTERACT_COMPLETE
+		if(!user.drop_item())
+			to_chat(user, SPAN_WARNING("[used] is stuck to your hand!"))
+			return ITEM_INTERACT_COMPLETE
+		to_chat(user, SPAN_NOTICE("You install [used] in [src]."))
+		new_igniter.forceMove(src)
+		igniter = new_igniter
 		update_icon()
-		return
+		add_fingerprint(user)
+		return ITEM_INTERACT_COMPLETE
 
-	if(isigniter(W))
-		var/obj/item/device/assembly/igniter/I = W
-		if(I.secured)	return
-		if(igniter)		return
-		user.drop_item()
-		I.loc = src
-		igniter = I
-		update_icon()
-		return
+	if(!user.drop_item())
+		to_chat(user, SPAN_WARNING("[used] is stuck to your hand!"))
+		return ITEM_INTERACT_COMPLETE
 
-	if(istype(W,/obj/item/weapon/tank/plasma))
-		if(ptank)
-			to_chat(user, "<span class='notice'>There appears to already be a plasma tank loaded in [src]!</span>")
-			return
-		user.drop_item()
-		ptank = W
-		W.loc = src
-		update_icon()
-		return
-
-	if(istype(W, /obj/item/device/analyzer) && ptank)
-		atmosanalyzer_scan(ptank.air_contents, user)
-	..()
-	return
-
-
-/obj/item/weapon/flamethrower/attack_self(mob/user as mob)
-	if(user.stat || user.restrained() || user.lying)	return
-	user.set_machine(src)
-	if(!ptank)
-		to_chat(user, "<span class='notice'>Attach a plasma tank first!</span>")
-		return
-	var/dat = text("<TT><B>Flamethrower (<A HREF='?src=[UID()];light=1'>[lit ? "<font color='red'>Lit</font>" : "Unlit"]</a>)</B><BR>\n Tank Pressure: [ptank.air_contents.return_pressure()]<BR>\n<A HREF='?src=[UID()];remove=1'>Remove plasmatank</A> - <A HREF='?src=[UID()];close=1'>Close</A></TT>")
-	user << browse(dat, "window=flamethrower;size=600x300")
-	onclose(user, "flamethrower")
-	return
-
-
-/obj/item/weapon/flamethrower/Topic(href,href_list[])
-	if(href_list["close"])
-		usr.unset_machine()
-		usr << browse(null, "window=flamethrower")
-		return
-	if(usr.stat || usr.restrained() || usr.lying)	return
-	usr.set_machine(src)
-	if(href_list["light"])
-		if(!ptank)	return
-		if(!status)	return
-		lit = !lit
-		if(lit)
-			processing_objects.Add(src)
-	if(href_list["remove"])
-		if(!ptank)	return
-		usr.put_in_hands(ptank)
-		ptank = null
-		lit = 0
-		usr.unset_machine()
-		usr << browse(null, "window=flamethrower")
-	for(var/mob/M in viewers(1, loc))
-		if((M.client && M.machine == src))
-			attack_self(M)
+	used.forceMove(src)
+	if(ptank)
+		ptank.forceMove(get_turf(src))
+		to_chat(user, SPAN_NOTICE("You swap the plasma tank in [src]."))
+	else
+		to_chat(user, SPAN_NOTICE("You install [used] in [src]."))
+	ptank = used
 	update_icon()
-	return
+	add_fingerprint(user)
+	return ITEM_INTERACT_COMPLETE
 
-/obj/item/weapon/flamethrower/CheckParts(list/parts_list)
+/obj/item/flamethrower/wrench_act(mob/user, obj/item/I)
+	if(status)
+		return
+	. = TRUE
+	if(!I.use_tool(src, user, 0, volume = I.tool_volume))
+		return
+	var/turf/T = get_turf(src)
+	if(weldtool)
+		weldtool.forceMove(T)
+		weldtool = null
+	if(igniter)
+		igniter.forceMove(T)
+		igniter = null
+	if(ptank)
+		ptank.forceMove(T)
+		ptank = null
+	new /obj/item/stack/rods(T)
+	qdel(src)
+
+/obj/item/flamethrower/screwdriver_act(mob/user, obj/item/I)
+	if(!igniter || lit)
+		return
+	. = TRUE
+	if(!I.use_tool(src, user, 0, volume = I.tool_volume))
+		return
+	status = !status
+	to_chat(user, SPAN_NOTICE("You [status ? "secure" : "unsecure"] [igniter] attached to [src]."))
+	update_icon()
+	add_fingerprint(user)
+
+/obj/item/flamethrower/return_analyzable_air()
+	if(ptank)
+		return ptank.return_analyzable_air()
+	return null
+
+/obj/item/flamethrower/activate_self(mob/user)
+	if(..())
+		return ITEM_INTERACT_COMPLETE
+	toggle_igniter(user)
+	add_fingerprint(user)
+	return ITEM_INTERACT_COMPLETE
+
+/obj/item/flamethrower/AltClick(mob/user)
+	if(!(ptank && isliving(user) && user.Adjacent(src)))
+		return
+	user.put_in_hands(ptank)
+	ptank = null
+	to_chat(user, SPAN_NOTICE("You remove the plasma tank from [src]."))
+	update_icon()
+	add_fingerprint(user)
+
+/obj/item/flamethrower/examine(mob/user)
+	. = ..()
+	if(ptank)
+		. += SPAN_NOTICE("[src] has \a [ptank] attached. Alt-click to remove it.")
+
+/obj/item/flamethrower/proc/toggle_igniter(mob/user)
+	if(!ptank)
+		to_chat(user, SPAN_WARNING("Attach a plasma tank first!"))
+		return
+	if(!status)
+		to_chat(user, SPAN_WARNING("Secure the igniter first!"))
+		return
+	to_chat(user, SPAN_NOTICE("You [lit ? "extinguish" : "ignite"] [src]!"))
+	lit = !lit
+	if(lit)
+		damtype = BURN
+		START_PROCESSING(SSobj, src)
+		if(!warned_admins)
+			message_admins("[ADMIN_LOOKUPFLW(user)] has lit a flamethrower.")
+			warned_admins = TRUE
+	else
+		damtype = initial(damtype)
+		STOP_PROCESSING(SSobj,src)
+	update_icon()
+
+/obj/item/flamethrower/CheckParts(list/parts_list)
 	..()
-	weldtool = locate(/obj/item/weapon/weldingtool) in contents
-	igniter = locate(/obj/item/device/assembly/igniter) in contents
-	weldtool.status = 0
-	igniter.secured = 0
-	status = 1
+	weldtool = locate(/obj/item/weldingtool) in contents
+	igniter = locate(/obj/item/assembly/igniter) in contents
+	igniter.secured = FALSE
+	status = TRUE
 	update_icon()
 
 //Called from turf.dm turf/dblclick
-/obj/item/weapon/flamethrower/proc/flame_turf(turflist)
-	if(!lit || operating)	return
-	operating = 1
+/obj/item/flamethrower/proc/flame_turf(turflist)
+	if(!lit || operating)
+		return
+	operating = TRUE
 	var/turf/previousturf = get_turf(src)
 	for(var/turf/simulated/T in turflist)
-		if(!T.air)
+		if(T.blocks_air)
 			break
 		if(T == previousturf)
 			continue	//so we don't burn the tile we be standin on
-		if(!T.CanAtmosPass(previousturf))
+		if(!T.CanAtmosPass(get_dir(T, previousturf)) || !previousturf.CanAtmosPass(get_dir(previousturf, T)))
 			break
-		ignite_turf(T)
+		if(igniter)
+			igniter.ignite_turf(src, T)
+		else
+			default_ignite(T)
 		sleep(1)
 		previousturf = T
-	operating = 0
+	operating = FALSE
 	for(var/mob/M in viewers(1, loc))
-		if((M.client && M.machine == src))
-			attack_self(M)
-	return
+		if(M.client && M.machine == src)
+			activate_self(M)
 
-
-/obj/item/weapon/flamethrower/proc/ignite_turf(turf/target, release_amount = 0.05)
+/obj/item/flamethrower/proc/default_ignite(turf/target, release_amount = 0.05)
+	//Transfer 5% of current tank air contents to turf
 	var/datum/gas_mixture/air_transfer = ptank.air_contents.remove_ratio(release_amount)
-	air_transfer.toxins = air_transfer.toxins // This is me not comprehending the air system. I realize this is retarded and I could probably make it work without fucking it up like this, but there you have it. -- TLE
-	target.assume_air(air_transfer)
-	//Burn it based on transfered gas
-	target.hotspot_expose((ptank.air_contents.temperature*2) + 380,500) // -- More of my "how do I shot fire?" dickery. -- TLE
-	//location.hotspot_expose(1000,500,1)
-	air_master.add_to_active(target, 0)
-	return
+	target.blind_release_air(air_transfer)
+	target.hotspot_expose(PLASMA_UPPER_TEMPERATURE, min(CELL_VOLUME, CELL_VOLUME * air_transfer.total_moles()))
 
+/obj/item/flamethrower/Initialize(mapload)
+	. = ..()
+	if(create_full)
+		if(!weldtool)
+			weldtool = new /obj/item/weldingtool(src)
+		if(!igniter)
+			igniter = new igniter_type(src)
+		igniter.secured = FALSE
+		status = TRUE
+		if(create_with_tank)
+			ptank = new /obj/item/tank/internals/plasma/full(src)
+		update_icon()
 
-/obj/item/weapon/flamethrower/full/New(var/loc)
-	..()
-	if(!weldtool)
-		weldtool = new /obj/item/weapon/weldingtool(src)
-	weldtool.status = 0
-	if(!igniter)
-		igniter = new /obj/item/device/assembly/igniter(src)
-	igniter.secured = 0
-	status = 1
-	update_icon()
+/obj/item/flamethrower/full
+	create_full = TRUE
 
-/obj/item/weapon/flamethrower/full/tank/New(var/loc)
-	..()
-	ptank = new /obj/item/weapon/tank/plasma/full(src)
-	update_icon()
+/obj/item/flamethrower/full/tank
+	create_with_tank = TRUE
 
-/obj/item/weapon/flamethrower/hit_reaction(mob/living/carbon/human/owner, attack_text, final_block_chance, damage, attack_type)
-	if(ptank && damage && attack_type == PROJECTILE_ATTACK && prob(15))
-		owner.visible_message("<span class='danger'>[attack_text] hits the fueltank on [owner]'s [src], rupturing it! What a shot!</span>")
-		var/target_turf = get_turf(owner)
-		ignite_turf(target_turf, 100)
-		qdel(ptank)
-		return 1 //It hit the flamethrower, not them
+/obj/item/flamethrower/hit_reaction(mob/living/carbon/human/owner, atom/movable/hitby, attack_text = "the attack", final_block_chance = 0, damage = 0, attack_type = MELEE_ATTACK)
+	var/obj/projectile/P = hitby
+	if(damage && attack_type == PROJECTILE_ATTACK && P.damage_type != STAMINA && prob(15))
+		owner.visible_message(SPAN_DANGER("[attack_text] hits the fueltank on [owner]'s [src], rupturing it! What a shot!"))
+		var/turf/target_turf = get_turf(owner)
+		log_game("A projectile ([hitby]) detonated a flamethrower tank held by [key_name(owner)] at [COORD(target_turf)]")
+		igniter.ignite_turf(src,target_turf, release_amount = 100)
+		QDEL_NULL(ptank)
+		return TRUE // It hit the flamethrower, not them.
+
+/obj/item/assembly/igniter/proc/flamethrower_process(turf/simulated/location)
+	location.hotspot_expose(700, 2)
+
+/obj/item/assembly/igniter/proc/ignite_turf(obj/item/flamethrower/F, turf/simulated/location, release_amount = 0.05)
+	F.default_ignite(location, release_amount)

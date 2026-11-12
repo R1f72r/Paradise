@@ -1,44 +1,95 @@
-/obj/item/device/assembly/igniter
+/obj/item/assembly/igniter
 	name = "igniter"
-	desc = "A small electronic device able to ignite combustable substances."
+	desc = "A small electronic device able to ignite combustible substances."
 	icon_state = "igniter"
-	materials = list(MAT_METAL=500, MAT_GLASS=50)
+	materials = list(MAT_METAL = 500, MAT_GLASS = 50)
 	origin_tech = "magnets=1"
-	var/datum/effect_system/spark_spread/sparks = new /datum/effect_system/spark_spread
+	var/datum/effect_system/spark_spread/sparks
 
-/obj/item/device/assembly/igniter/New()
-	..()
+/obj/item/assembly/igniter/Initialize(mapload)
+	. = ..()
+	sparks = new /datum/effect_system/spark_spread
 	sparks.set_up(2, 0, src)
 	sparks.attach(src)
 
-/obj/item/device/assembly/igniter/Destroy()
+/obj/item/assembly/igniter/Destroy()
 	QDEL_NULL(sparks)
 	return ..()
 
+/obj/item/assembly/igniter/examine(mob/user)
+	. = ..()
+	. += "The igniter is [secured ? "secured." : "unsecured."]"
 
-/obj/item/device/assembly/igniter/describe()
-	return "The igniter is [secured?"secured.":"unsecured."]"
 
+/obj/item/assembly/igniter/activate()
+	if(!..())
+		return FALSE //Cooldown check
 
-/obj/item/device/assembly/igniter/activate()
-	if(!..())	return 0//Cooldown check
 	var/turf/location = get_turf(loc)
-	if(location)	location.hotspot_expose(1000,1000)
-	if(istype(src.loc,/obj/item/device/assembly_holder))
-		if(istype(src.loc.loc, /obj/structure/reagent_dispensers/fueltank/))
-			var/obj/structure/reagent_dispensers/fueltank/tank = src.loc.loc
+	if(location)
+		location.hotspot_expose(1000, 1)
+	visible_message(
+		SPAN_NOTICE("Sparks shoot out of [src]."),
+		SPAN_WARNING("You hear a shower of sparks shooting out from something!")
+		)
+	sparks.start()
+
+	if(istype(loc, /obj/item/assembly_holder))
+		var/locloc = loc.loc
+		if(istype(locloc, /obj/structure/reagent_dispensers/fueltank))
+			var/obj/structure/reagent_dispensers/fueltank/tank = locloc
 			if(tank)
-				tank.boom()
-		if(istype(src.loc.loc, /obj/item/weapon/reagent_containers/glass/beaker/))
-			var/obj/item/weapon/reagent_containers/glass/beaker/beakerbomb = src.loc.loc
+				tank.boom(TRUE)  // this qdel's `src`
+
+		if(istype(locloc, /obj/item/onetankbomb))
+			var/obj/item/onetankbomb/bomb = locloc
+			if(bomb?.bombtank)
+				if(bomb.status)
+					bomb.bombtank.detonate()
+				else
+					bomb.bombtank.release()
+
+		else if(istype(locloc, /obj/item/reagent_containers/glass/beaker))
+			var/obj/item/reagent_containers/glass/beaker/beakerbomb = locloc
 			if(beakerbomb)
 				beakerbomb.heat_beaker()
 
-	sparks.start()
-	return 1
+		else if(istype(locloc, /obj/item/grenade/chem_grenade))
+			var/obj/item/grenade/chem_grenade/CG = locloc
+			CG.prime()
 
+	return TRUE
 
-/obj/item/device/assembly/igniter/attack_self(mob/user as mob)
-	activate()
-	add_fingerprint(user)
-	return
+/obj/item/assembly/igniter/interact_with_atom(mob/living/target, mob/living/user, list/modifiers)
+	if(!cigarette_lighter_act(user, target))
+		return ..()
+	return ITEM_INTERACT_COMPLETE
+
+/obj/item/assembly/igniter/cigarette_lighter_act(mob/living/user, mob/living/target, obj/item/direct_attackby_item)
+	var/obj/item/clothing/mask/cigarette/cig = ..()
+	if(!cig)
+		return !isnull(cig)
+
+	if(target == user)
+		user.visible_message(
+			SPAN_NOTICE("[user] presses [src] against [cig] and activates it, lighting [cig] in a shower of sparks!"),
+			SPAN_NOTICE("You press [src] against [cig] and activates it, lighting [cig] in a shower of sparks!"),
+			SPAN_WARNING("You hear a shower of sparks shooting out from something!")
+		)
+	else
+		user.visible_message(
+			SPAN_NOTICE("[user] presses [src] against [cig] and activates it, lighting [cig] for [target] in a shower of sparks!"),
+			SPAN_NOTICE("You press [src] against [cig] and activate it, lighting [cig] in a shower of sparks!"),
+			SPAN_WARNING("You hear a shower of sparks shooting out from something!")
+		)
+	sparks.start()	// Make sparks fly!
+	cig.light(user, target)
+	return TRUE
+
+/obj/item/assembly/igniter/activate_self(mob/user)
+	. = ..()
+	if(!istype(loc, /obj/item/assembly_holder))
+		activate()
+
+/obj/item/assembly/igniter/get_heat()
+	return 2000

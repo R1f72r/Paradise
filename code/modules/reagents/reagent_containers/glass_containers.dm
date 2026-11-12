@@ -1,359 +1,385 @@
 ////////////////////////////////////////////////////////////////////////////////
 /// (Mixing)Glass.
 ////////////////////////////////////////////////////////////////////////////////
-/obj/item/weapon/reagent_containers/glass
+/obj/item/reagent_containers/glass
 	name = " "
 	var/base_name = " "
 	desc = " "
-	icon = 'icons/obj/chemical.dmi'
-	icon_state = "null"
-	item_state = "null"
 	amount_per_transfer_from_this = 10
 	possible_transfer_amounts = list(5,10,15,25,30,50)
 	volume = 50
-	flags = OPENCONTAINER
-
+	container_type = OPENCONTAINER
+	has_lid = TRUE
+	resistance_flags = ACID_PROOF
+	blocks_emissive = FALSE
+	usesound = 'sound/items/deconstruct.ogg'
 	var/label_text = ""
-	// the fucking asshole who designed this can go die in a fire - Iamgoofball
-	var/list/can_be_placed_into = list(
-		/obj/machinery/chem_master/,
-		/obj/machinery/chem_heater/,
-		/obj/machinery/chem_dispenser/,
-		/obj/machinery/reagentgrinder,
-		/obj/structure/table,
-		/obj/structure/closet,
-		/obj/structure/sink,
-		/obj/structure/toilet,
-		/obj/item/weapon/storage,
-		/obj/machinery/atmospherics/unary/cryo_cell,
-		/obj/machinery/dna_scannernew,
-		/obj/item/weapon/grenade/chem_grenade,
-		/mob/living/simple_animal/bot/medbot,
-		/obj/item/weapon/storage/secure/safe,
-		/obj/machinery/iv_drip,
-		/obj/machinery/computer/pandemic,
-		/obj/machinery/disposal,
-		/mob/living/simple_animal/cow,
-		/mob/living/simple_animal/hostile/retaliate/goat,
-		/obj/machinery/sleeper,
-		/obj/machinery/smartfridge/,
-		/obj/machinery/biogenerator,
-		/obj/machinery/hydroponics,
-		/obj/machinery/constructable_frame,
-		/obj/machinery/icemachine,
-		/obj/item/weapon/bombcore/chemical,
-		/obj/machinery/vending)
 
-/obj/item/weapon/reagent_containers/glass/New()
-	..()
+/obj/item/reagent_containers/glass/Initialize(mapload)
+	. = ..()
 	base_name = name
 
-/obj/item/weapon/reagent_containers/glass/examine(mob/user)
-	if(!..(user, 2))
-		return
-	if(!is_open_container())
-		to_chat(user, "<span class='notice'>Airtight lid seals it completely.</span>")
+/obj/item/reagent_containers/glass/examine(mob/user)
+	. = ..()
+	if(get_dist(user, src) <= 2 && !is_open_container())
+		. += SPAN_NOTICE("Airtight lid seals it completely.")
 
-/obj/item/weapon/reagent_containers/glass/attack_self()
-	..()
-	if(is_open_container())
-		to_chat(usr, "<span class='notice'>You put the lid on [src].</span>")
-		flags ^= OPENCONTAINER
-	else
-		to_chat(usr, "<span class='notice'>You take the lid off [src].</span>")
-		flags |= OPENCONTAINER
-	update_icon()
+	. += SPAN_NOTICE("[src] can hold up to [reagents.maximum_volume] units.")
 
-/obj/item/weapon/reagent_containers/glass/afterattack(obj/target, mob/user, proximity)
-	if(!proximity)
-		return
+/obj/item/reagent_containers/glass/mob_act(mob/target, mob/living/user)
+	. = TRUE
 	if(!is_open_container())
 		return
 
-	for(var/type in can_be_placed_into)
-		if(istype(target, type))
-			return
+	if(!reagents || !reagents.total_volume)
+		to_chat(user, SPAN_WARNING("[src] is empty!"))
+		return
 
-	if(ismob(target) && target.reagents && reagents.total_volume)
-		to_chat(user, "<span class='notice'>You splash the solution onto [target].</span>")
-
-		var/mob/living/M = target
-		var/list/injected = list()
+	if(istype(target))
+		var/list/transferred = list()
 		for(var/datum/reagent/R in reagents.reagent_list)
-			injected += R.name
-		var/contained = english_list(injected)
-		M.create_attack_log("<font color='orange'>Has been splashed with [name] by [key_name(user)]. Reagents: [contained]</font>")
-		user.create_attack_log("<font color='red'>Used the [name] to splash [key_name(M)]. Reagents: [contained]</font>")
-		if(M.ckey)
-			msg_admin_attack("[key_name_admin(user)] splashed [key_name_admin(M)] with [name]. Reagents: [contained] (INTENT: [uppertext(user.a_intent)])")
-		if(!iscarbon(user))
-			M.LAssailant = null
+			transferred += R.name
+		var/contained = english_list(transferred)
+
+		if(user.a_intent == INTENT_HARM)
+			target.visible_message(SPAN_DANGER("[user] splashes the contents of [src] onto [target]!"), \
+							SPAN_USERDANGER("[user] splashes the contents of [src] onto [target]!"))
+			add_attack_logs(user, target, "Splashed with [name] containing [contained]", !!target.ckey ? null : ATKLOG_ALL)
+
+			reagents.reaction(target, REAGENT_TOUCH)
+			reagents.clear_reagents()
 		else
-			M.LAssailant = user
+			if(!iscarbon(target)) // Non-carbons can't process reagents
+				to_chat(user, SPAN_WARNING("You cannot find a way to feed [target]."))
+				return
+			var/mob/living/carbon/carb_mob = target
+			if(ishuman(target))
+				var/mob/living/carbon/human/human_target = target
+				if(!human_target.get_organ("head"))
+					to_chat(user, SPAN_WARNING("[target == user ? "You don't" : "[target] doesn't"] have a head to drink with!"))
+					return
+			if(carb_mob != user)
+				carb_mob.visible_message(SPAN_DANGER("[user] attempts to feed something to [carb_mob]."), \
+							SPAN_USERDANGER("[user] attempts to feed something to you."))
+				if(!do_mob(user, carb_mob))
+					return
+				if(!reagents || !reagents.total_volume)
+					return // The drink might be empty after the delay, such as by spam-feeding
+				carb_mob.visible_message(SPAN_DANGER("[user] feeds something to [target]."), SPAN_USERDANGER("[user] feeds something to you."))
+				add_attack_logs(user, carb_mob, "Fed with [name] containing [contained]", !!carb_mob.ckey ? null : ATKLOG_ALL)
+			else
+				to_chat(user, SPAN_NOTICE("You swallow a gulp of [src]."))
+			var/fraction = min(5 / reagents.total_volume, 1)
+			carb_mob.taste(reagents) // yummy
+			reagents.reaction(carb_mob, REAGENT_INGEST, fraction)
+			addtimer(CALLBACK(reagents, TYPE_PROC_REF(/datum/reagents, trans_to), carb_mob, 5), 5)
+			playsound(target.loc,'sound/items/drink.ogg', rand(10,50), TRUE)
+			// Add viruses where needed
+			if(length(carb_mob.viruses))
+				AddComponent(/datum/component/viral_contamination, carb_mob.viruses)
+			// Infect contained blood as well for splash reactions
+			var/datum/reagent/blood/blood_contained = locate() in reagents.reagent_list
+			if(blood_contained?.data["viruses"])
+				var/list/blood_viruses = blood_contained.data["viruses"]
+				blood_viruses |= carb_mob.viruses.Copy()
+				blood_contained.data["viruses"] = blood_viruses
+			SEND_SIGNAL(src, COMSIG_MOB_REAGENT_EXCHANGE, carb_mob)
 
-		for(var/mob/O in viewers(world.view, user))
-			O.show_message(text("<span class='warning'>[] has been splashed with something by []!</span>", target, user), 1)
-		reagents.reaction(target, TOUCH)
-		spawn(5) reagents.clear_reagents()
+/obj/item/reagent_containers/glass/normal_act(atom/target, mob/living/user)
+	if(!check_allowed_items(target, target_self = TRUE) || !is_open_container() || !reagents)
 		return
-	else if(istype(target, /obj/structure/reagent_dispensers)) //A dispenser. Transfer FROM it TO us.
 
-		if(target.reagents && !target.reagents.total_volume)
-			to_chat(user, "<span class='warning'>[target] is empty and can't be refilled!</span>")
-			return
-
-		if(reagents.total_volume >= reagents.maximum_volume)
-			to_chat(user, "<span class='notice'>[src] is full.</span>")
-			return
-
-		var/trans = target.reagents.trans_to(src, amount_per_transfer_from_this)
-		to_chat(user, "<span class='notice'>You fill [src] with [trans] unit\s of the contents of [target].</span>")
-
-	else if(target.is_open_container() && target.reagents) //Something like a glass. Player probably wants to transfer TO it.
+	. = TRUE
+	if(target.is_refillable()) //Something like a glass. Player probably wants to transfer TO it.
 		if(!reagents.total_volume)
-			to_chat(user, "<span class='warning'>[src] is empty.</span>")
+			to_chat(user, SPAN_WARNING("[src] is empty!"))
 			return
 
-		if(target.reagents.total_volume >= target.reagents.maximum_volume)
-			to_chat(user, "<span class='warning'>[target] is full.</span>")
+		if(target.reagents.holder_full())
+			to_chat(user, SPAN_WARNING("[target] is full."))
 			return
 
 		var/trans = reagents.trans_to(target, amount_per_transfer_from_this)
-		to_chat(user, "<span class='notice'>You transfer [trans] units of the solution to [target].</span>")
-
-	else if(istype(target, /obj/item/weapon/reagent_containers/glass) && !target.is_open_container())
-		to_chat(user, "<span class='warning'>You cannot fill [target] while it is sealed.</span>")
+		to_chat(user, SPAN_NOTICE("You transfer [trans] unit\s of the solution to [target]."))
 		return
 
-	else if(istype(target, /obj/effect/decal/cleanable)) //stops splashing while scooping up fluids
-		return
+	else if(target.is_drainable()) //A dispenser. Transfer FROM it TO us.
+		if(!target.reagents.total_volume)
+			to_chat(user, SPAN_WARNING("[target] is empty and can't be refilled!"))
+			return
 
+		if(reagents.holder_full())
+			to_chat(user, SPAN_WARNING("[src] is full."))
+			return
+
+		var/trans = target.reagents.trans_to(src, amount_per_transfer_from_this)
+		to_chat(user, SPAN_NOTICE("You fill [src] with [trans] unit\s of the contents of [target]."))
+		return
 	else if(reagents.total_volume)
-		to_chat(user, "<span class='notice'>You splash the solution onto [target].</span>")
-		reagents.reaction(target, TOUCH)
-		spawn(5) reagents.clear_reagents()
-		return
+		if(user.a_intent == INTENT_HARM)
+			user.visible_message(SPAN_DANGER("[user] splashes the contents of [src] onto [target]!"), \
+								SPAN_NOTICE("You splash the contents of [src] onto [target]."))
+			reagents.reaction(target, REAGENT_TOUCH)
+			reagents.clear_reagents()
+			return
 
+	return FALSE
 
-/obj/item/weapon/reagent_containers/glass/attackby(obj/item/I, mob/user, params)
-	if(istype(I, /obj/item/clothing/mask/cigarette)) //ciggies are weird
-		return
-	if(is_hot(I))
-		if(reagents)
-			reagents.chem_temp += 15
-			to_chat(user, "<span class='notice'>You heat [src] with [I].</span>")
-			reagents.handle_reactions()
-	if(istype(I, /obj/item/weapon/pen) || istype(I, /obj/item/device/flashlight/pen))
-		var/tmp_label = sanitize(input(user, "Enter a label for [name]","Label",label_text))
-		if(length(tmp_label) > MAX_NAME_LEN)
-			to_chat(user, "<span class='warning'>The label can be at most [MAX_NAME_LEN] characters long.</span>")
-		else
-			to_chat(user, "<span class='notice'>You set the label to \"[tmp_label]\".</span>")
-			label_text = tmp_label
-			update_name_label()
-	if(istype(I,/obj/item/weapon/storage/bag))
-		..()
+/obj/item/reagent_containers/glass/item_interaction(mob/living/user, obj/item/used, list/modifiers)
+	if(is_pen(used))
+		var/t = rename_interactive(user, used)
+		if(!isnull(t))
+			label_text = t
+		return ITEM_INTERACT_COMPLETE
+	return ..()
 
-/obj/item/weapon/reagent_containers/glass/proc/update_name_label()
-	if(label_text == "")
-		name = base_name
-	else
-		name = "[base_name] ([label_text])"
-
-/obj/item/weapon/reagent_containers/glass/beaker
+/obj/item/reagent_containers/glass/beaker
 	name = "beaker"
-	desc = "A beaker. Can hold up to 50 units."
-	icon = 'icons/obj/chemical.dmi'
+	desc = "A simple glass beaker, nothing special."
 	icon_state = "beaker"
-	item_state = "beaker"
-	materials = list(MAT_GLASS=500)
-	var/obj/item/device/assembly_holder/assembly = null
+	inhand_icon_state = "beaker"
+	belt_icon = "beaker"
+	materials = list(MAT_GLASS = 1000)
+	var/obj/item/assembly_holder/assembly = null
 	var/can_assembly = 1
 
-/obj/item/weapon/reagent_containers/glass/beaker/on_reagent_change()
-	update_icon()
+/obj/item/reagent_containers/glass/beaker/Initialize(mapload)
+	. = ..()
+	var/static/list/loc_connections = list(
+		COMSIG_ATOM_ENTERED = PROC_REF(on_atom_entered),
+	)
+	AddElement(/datum/element/connect_loc, loc_connections)
 
-/obj/item/weapon/reagent_containers/glass/beaker/update_icon()
-	overlays.Cut()
+/obj/item/reagent_containers/glass/beaker/examine(mob/user)
+	. = ..()
+	if(assembly)
+		. += SPAN_NOTICE("There is an [assembly] attached to it, use a screwdriver to remove it.")
 
+/obj/item/reagent_containers/glass/beaker/on_reagent_change()
+	update_icon(UPDATE_OVERLAYS)
+
+/obj/item/reagent_containers/glass/beaker/update_overlays()
+	. = ..()
 	if(reagents.total_volume)
-		var/image/filling = image('icons/obj/reagentfillings.dmi', src, "[icon_state]10")
+		var/image/filling = image('icons/obj/reagentfillings.dmi', src, "[icon_state]1")
 
 		var/percent = round((reagents.total_volume / volume) * 100)
 		switch(percent)
-			if(0 to 9)
-				filling.icon_state = "[icon_state]-10"
-			if(10 to 24)
-				filling.icon_state = "[icon_state]10"
-			if(25 to 49)
-				filling.icon_state = "[icon_state]25"
-			if(50 to 74)
-				filling.icon_state = "[icon_state]50"
-			if(75 to 79)
-				filling.icon_state = "[icon_state]75"
-			if(80 to 90)
+			if(1 to 19)
+				filling.icon_state = "[icon_state]1"
+			if(20 to 39)
+				filling.icon_state = "[icon_state]20"
+			if(40 to 59)
+				filling.icon_state = "[icon_state]40"
+			if(60 to 79)
+				filling.icon_state = "[icon_state]60"
+			if(80 to 99)
 				filling.icon_state = "[icon_state]80"
-			if(91 to INFINITY)
+			if(100 to INFINITY)
 				filling.icon_state = "[icon_state]100"
 
 		filling.icon += mix_color_from_reagents(reagents.reagent_list)
-		overlays += filling
+		. += filling
 
 	if(!is_open_container())
-		var/image/lid = image(icon, src, "lid_[initial(icon_state)]")
-		overlays += lid
+		. += "lid_[initial(icon_state)]"
+		if(!blocks_emissive)
+			. += emissive_blocker(icon, "lid_[initial(icon_state)]")
 	if(assembly)
-		overlays += "assembly"
+		. += "assembly"
 
-/obj/item/weapon/reagent_containers/glass/beaker/verb/remove_assembly()
-	set name = "Remove Assembly"
-	set category = "Object"
-	set src in usr
-	if(usr.incapacitated())
-		return
-	if(assembly)
-		to_chat(usr, "<span class='notice'>You detach [assembly] from [src]</span>")
-		usr.put_in_hands(assembly)
-		assembly = null
-		update_icon()
-	else
-		to_chat(usr, "<span class='notice'>There is no assembly to remove.</span>")
-
-/obj/item/weapon/reagent_containers/glass/beaker/proc/heat_beaker()
+/obj/item/reagent_containers/glass/beaker/proc/heat_beaker()
 	if(reagents)
-		reagents.chem_temp += 30
-		reagents.handle_reactions()
+		reagents.temperature_reagents(4000)
 
-/obj/item/weapon/reagent_containers/glass/beaker/attackby(obj/item/weapon/W, mob/user, params)
-	if(istype(W, /obj/item/device/assembly_holder) && can_assembly)
+/obj/item/reagent_containers/glass/beaker/item_interaction(mob/living/user, obj/item/used, list/modifiers)
+	if(istype(used, /obj/item/assembly_holder) && can_assembly)
 		if(assembly)
-			to_chat(usr, "<span class='warning'>[src] already has an assembly.</span>")
-			return ..()
-		assembly = W
-		user.drop_item()
-		W.loc = src
-		overlays += "assembly"
-	else
-		..()
+			to_chat(usr, SPAN_WARNING("[src] already has an assembly."))
+		else
+			assembly = used
+			user.drop_item()
+			used.forceMove(src)
+			update_icon(UPDATE_OVERLAYS)
+		return ITEM_INTERACT_COMPLETE
+	return ..()
 
-/obj/item/weapon/reagent_containers/glass/beaker/HasProximity(atom/movable/AM)
+/obj/item/reagent_containers/glass/beaker/HasProximity(atom/movable/AM)
 	if(assembly)
 		assembly.HasProximity(AM)
 
-/obj/item/weapon/reagent_containers/glass/beaker/Crossed(atom/movable/AM)
+/obj/item/reagent_containers/glass/beaker/proc/on_atom_entered(datum/source, atom/movable/entered)
 	if(assembly)
-		assembly.Crossed(AM)
+		assembly.on_atom_entered(source, entered)
 
-/obj/item/weapon/reagent_containers/glass/beaker/on_found(mob/finder) //for mousetraps
+/obj/item/reagent_containers/glass/beaker/on_found(mob/finder) //for mousetraps
 	if(assembly)
 		assembly.on_found(finder)
 
-/obj/item/weapon/reagent_containers/glass/beaker/hear_talk(mob/living/M, msg)
+/obj/item/reagent_containers/glass/beaker/hear_talk(mob/living/M, list/message_pieces)
 	if(assembly)
-		assembly.hear_talk(M, msg)
+		assembly.hear_talk(M, message_pieces)
 
-/obj/item/weapon/reagent_containers/glass/beaker/hear_message(mob/living/M, msg)
+/obj/item/reagent_containers/glass/beaker/hear_message(mob/living/M, msg)
 	if(assembly)
 		assembly.hear_message(M, msg)
 
-/obj/item/weapon/reagent_containers/glass/beaker/large
-	name = "large beaker"
-	desc = "A large beaker. Can hold up to 100 units."
-	icon_state = "beakerlarge"
-	materials = list(MAT_GLASS=2500)
-	volume = 100
-	amount_per_transfer_from_this = 10
-	possible_transfer_amounts = list(5,10,15,25,30,50,100)
-	flags = OPENCONTAINER
+/obj/item/reagent_containers/glass/beaker/screwdriver_act(mob/living/user, obj/item/I)
+	if(!I.use_tool(src, user, 0, volume = I.tool_volume))
+		return
+	if(assembly)
+		to_chat(user, SPAN_NOTICE("You detach [assembly] from [src]"))
+		user.put_in_hands(assembly)
+		assembly = null
+		update_icon(UPDATE_OVERLAYS)
+	else
+		to_chat(user, SPAN_NOTICE("There is no assembly to remove."))
 
-/obj/item/weapon/reagent_containers/glass/beaker/vial
+/obj/item/reagent_containers/glass/beaker/large
+	name = "large beaker"
+	desc = "A large glass beaker with twice the capacity of a normal beaker."
+	icon_state = "beakerlarge"
+	materials = list(MAT_GLASS = 2500)
+	volume = 100
+	possible_transfer_amounts = list(5,10,15,25,30,50,100)
+
+/obj/item/reagent_containers/glass/beaker/large/robot // Only for borgs.
+	name = "large integrated beaker"
+	desc = "An internal chemical beaker used for holding a large reserve of chemicals."
+
+/obj/item/reagent_containers/glass/beaker/large/robot/item_interaction(mob/living/user, obj/item/used, list/modifiers)
+	if(istype(used, /obj/item/gripper)) // So the borg isn't able to take out its beaker.
+		to_chat(user, SPAN_NOTICE("You can't grab [src]."))
+		return ITEM_INTERACT_COMPLETE
+	return ..()
+
+/obj/item/reagent_containers/glass/beaker/vial
 	name = "vial"
-	desc = "A small glass vial. Can hold up to 25 units."
+	desc = "A small glass vial, often used by virologists of the 25th century."
 	icon_state = "vial"
-	materials = list(MAT_GLASS=250)
+	belt_icon = "vial"
+	materials = list(MAT_GLASS = 250)
 	volume = 25
-	amount_per_transfer_from_this = 10
 	possible_transfer_amounts = list(5,10,15,25)
-	flags = OPENCONTAINER
 	can_assembly = 0
 
-/obj/item/weapon/reagent_containers/glass/beaker/drugs
+/obj/item/reagent_containers/glass/beaker/drugs
 	name = "baggie"
-	desc = "A baggie. Can hold up to 10 units."
+	desc = "A small plastic baggie, often used by pharmaceutical \"entrepreneurs\"."
 	icon_state = "baggie"
 	amount_per_transfer_from_this = 2
-	possible_transfer_amounts = 2
+	possible_transfer_amounts = null
 	volume = 10
-	flags = OPENCONTAINER
 	can_assembly = 0
+	materials = list(MAT_PLASTIC = 50)
 
-/obj/item/weapon/reagent_containers/glass/beaker/noreact
+/obj/item/reagent_containers/glass/beaker/noreact
 	name = "cryostasis beaker"
-	desc = "A cryostasis beaker that allows for chemical storage without reactions. Can hold up to 50 units."
+	desc = "A cryostasis beaker that allows for chemical storage without reactions."
 	icon_state = "beakernoreact"
-	materials = list(MAT_METAL=3000)
-	volume = 50
-	amount_per_transfer_from_this = 10
+	materials = list(MAT_METAL = 3000)
 	origin_tech = "materials=2;engineering=3;plasmatech=3"
-	flags = OPENCONTAINER
+	blocks_emissive = EMISSIVE_BLOCK_GENERIC
 
-/obj/item/weapon/reagent_containers/glass/beaker/noreact/New()
-	..()
+/obj/item/reagent_containers/glass/beaker/noreact/Initialize(mapload)
+	. = ..()
 	reagents.set_reacting(FALSE)
 
-/obj/item/weapon/reagent_containers/glass/beaker/bluespace
+/obj/item/reagent_containers/glass/beaker/bluespace
 	name = "bluespace beaker"
-	desc = "A bluespace beaker, powered by experimental bluespace technology and Element Cuban combined with the Compound Pete. Can hold up to 300 units."
+	desc = "A bleeding-edge beaker that uses experimental bluespace technology to store massive quantities of liquid."
 	icon_state = "beakerbluespace"
-	materials = list(MAT_GLASS=3000)
+	materials = list(MAT_GLASS = 3000, MAT_PLASMA = 3000, MAT_DIAMOND = 250, MAT_BLUESPACE = 250)
 	volume = 300
-	amount_per_transfer_from_this = 10
 	possible_transfer_amounts = list(5,10,15,25,30,50,100,300)
-	flags = OPENCONTAINER
+	blocks_emissive = EMISSIVE_BLOCK_GENERIC
 	origin_tech = "bluespace=5;materials=4;plasmatech=4"
 
-/obj/item/weapon/reagent_containers/glass/beaker/cryoxadone
+/obj/item/reagent_containers/glass/beaker/cryoxadone
 	list_reagents = list("cryoxadone" = 30)
 
-/obj/item/weapon/reagent_containers/glass/beaker/sulphuric
+/obj/item/reagent_containers/glass/beaker/sulphuric
 	list_reagents = list("sacid" = 50)
 
 
-/obj/item/weapon/reagent_containers/glass/beaker/slime
+/obj/item/reagent_containers/glass/beaker/slime
 	list_reagents = list("slimejelly" = 50)
 
-/obj/item/weapon/reagent_containers/glass/beaker/drugs/meth
+/obj/item/reagent_containers/glass/beaker/drugs/meth
 	list_reagents = list("methamphetamine" = 10)
 
-
-/obj/item/weapon/reagent_containers/glass/bucket
-	desc = "It's a bucket."
+/obj/item/reagent_containers/glass/bucket
 	name = "bucket"
+	desc = "Useful for moving liquids, or having a helmet in the zombie apocalypse."
 	icon = 'icons/obj/janitor.dmi'
 	icon_state = "bucket"
-	item_state = "bucket"
-	materials = list(MAT_METAL=200)
+	materials = list(MAT_METAL = 400)
 	w_class = WEIGHT_CLASS_NORMAL
 	amount_per_transfer_from_this = 20
 	possible_transfer_amounts = list(5,10,15,20,25,30,50,80,100,120)
 	volume = 120
-	armor = list(melee = 10, bullet = 0, laser = 0, energy = 0, bomb = 0, bio = 0, rad = 0)
-	slot_flags = SLOT_HEAD
-	flags = OPENCONTAINER
+	armor = list(MELEE = 10, BULLET = 0, LASER = 0, ENERGY = 0, BOMB = 0, RAD = 0, FIRE = 75, ACID = 50) //Weak melee protection, because you can wear it on your head
+	slot_flags = ITEM_SLOT_HEAD
+	body_parts_covered = HEAD
+	prefered_slot_flags = ITEM_SLOT_IN_BACKPACK
+	resistance_flags = NONE
+	blocks_emissive = EMISSIVE_BLOCK_GENERIC
+	dog_fashion = /datum/dog_fashion/head/bucket
 
-/obj/item/weapon/reagent_containers/glass/bucket/equipped(mob/user, slot)
-    ..()
-    if(slot == slot_head && reagents.total_volume)
-        to_chat(user, "<span class='userdanger'>[src]'s contents spill all over you!</span>")
-        reagents.reaction(user, TOUCH)
-        reagents.clear_reagents()
+/obj/item/reagent_containers/glass/bucket/update_overlays()
+	. = ..()
+	if(!is_open_container())
+		. += "lid_[initial(icon_state)]"
 
-/obj/item/weapon/reagent_containers/glass/bucket/attackby(obj/D, mob/user, params)
-	if(isprox(D))
-		to_chat(user, "You add [D] to [src].")
-		qdel(D)
-		user.put_in_hands(new /obj/item/weapon/bucket_sensor)
-		user.unEquip(src)
+/obj/item/reagent_containers/glass/bucket/wooden
+	name = "wooden bucket"
+	icon_state = "woodbucket"
+	materials = null
+	armor = list(MELEE = 10, BULLET = 0, LASER = 0, ENERGY = 0, BOMB = 0, RAD = 0, FIRE = 0, ACID = 50)
+	resistance_flags = FLAMMABLE
+	materials = list(MAT_WOOD = 6000)
+
+/obj/item/reagent_containers/glass/bucket/equipped(mob/user, slot)
+	..()
+	if(slot == ITEM_SLOT_HEAD && reagents.total_volume)
+		to_chat(user, SPAN_USERDANGER("[src]'s contents spill all over you!"))
+		reagents.reaction(user, REAGENT_TOUCH)
+		reagents.clear_reagents()
+
+/obj/item/reagent_containers/glass/bucket/item_interaction(mob/living/user, obj/item/used, list/modifiers)
+	if(istype(used, /obj/item/mop))
+		var/obj/item/mop/mop = used
+		mop.wet_mop(src, user)
+		return ITEM_INTERACT_COMPLETE
+	if(isprox(used))
+		to_chat(user, SPAN_NOTICE("You add [used] to [src]."))
+		qdel(used)
+		user.put_in_hands(new /obj/item/bot_assembly/cleanbot)
+		user.unequip(src)
 		qdel(src)
-	else
-		..()
+		return ITEM_INTERACT_COMPLETE
+	return ..()
+
+/obj/item/reagent_containers/glass/beaker/waterbottle
+	name = "bottle of water"
+	desc = "A bottle of water filled at an old Earth bottling facility."
+	icon = 'icons/obj/drinks/bottles.dmi'
+	icon_state = "smallbottle"
+	inhand_icon_state = "bottle"
+	list_reagents = list("water" = 49.5, "fluorine" = 0.5) //see desc, don't think about it too hard
+	materials = list(MAT_PLASTIC = 500)
+
+/obj/item/reagent_containers/glass/beaker/waterbottle/empty
+	list_reagents = list()
+
+/obj/item/reagent_containers/glass/beaker/waterbottle/large
+	desc = "A fresh commercial-sized bottle of water."
+	icon_state = "largebottle"
+	materials = list(MAT_GLASS = 0)
+	list_reagents = list("water" = 100)
+	volume = 100
+	amount_per_transfer_from_this = 20
+	materials = list(MAT_PLASTIC = 1000)
+
+/obj/item/reagent_containers/glass/beaker/waterbottle/large/empty
+	list_reagents = list()

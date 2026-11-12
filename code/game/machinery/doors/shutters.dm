@@ -1,69 +1,50 @@
 /obj/machinery/door/poddoor/shutters
+	gender = PLURAL
 	name = "shutters"
-	desc = "Heavy duty metal shutters that opens mechanically."
-	icon = 'icons/obj/doors/rapid_pdoor.dmi'
-	icon_state = "shutter1"
+	desc = "Heavy duty metal shutters that open mechanically."
+	icon = 'icons/obj/doors/shutters.dmi'
+	layer = SHUTTER_LAYER
+	closingLayer = SHUTTER_LAYER
+	damage_deflection = 20
 	dir = EAST
 
-/obj/machinery/door/poddoor/shutters/New()
-	..()
-	layer = 3.1
+/obj/machinery/door/poddoor/shutters/manual_rotation
+	manual_dir = TRUE
 
 /obj/machinery/door/poddoor/shutters/preopen
-	icon_state = "shutter0"
-	density = 0
-	opacity = 0
+	icon_state = "open"
+	density = FALSE
+	opacity = FALSE
 
-/obj/machinery/door/poddoor/shutters/attackby(obj/item/weapon/C, mob/user, params)
-	add_fingerprint(user)
-	if(!(iscrowbar(C) || (istype(C, /obj/item/weapon/twohanded/fireaxe) && C:wielded == 1)))
-		return
-	if(density && (stat & NOPOWER) && !operating)
-		operating = 1
-		spawn(-1)
-			flick("shutterc0", src)
-			icon_state = "shutter0"
-			sleep(15)
-			density = 0
-			set_opacity(0)
-			operating = 0
-			return
-	return
+/obj/machinery/door/poddoor/shutters/preopen/manual_rotation
+	manual_dir = TRUE
 
-/obj/machinery/door/poddoor/shutters/open()
-	if(operating || emagged) //doors can still open when emag-disabled
-		return
-	if(!ticker)
-		return 0
-	if(!operating) //in case of emag
-		operating = 1
-	flick("shutterc0", src)
-	icon_state = "shutter0"
-	sleep(10)
-	density = 0
-	set_opacity(0)
-	air_update_turf(1)
-	update_freelook_sight()
+/obj/machinery/door/poddoor/shutters/radiation
+	name = "radiation shutters"
+	desc = "Lead-lined shutters with a radiation hazard symbol. Whilst this won't stop you getting irradiated, especially by a supermatter crystal, it will stop radiation travelling as far."
+	icon = 'icons/obj/doors/shutters_radiation.dmi'
+	rad_insulation_beta = RAD_BETA_BLOCKER
+	rad_insulation_gamma = RAD_VERY_EXTREME_INSULATION
 
-	if(operating) //emag again
-		operating = 0
-	if(autoclose)
-		spawn(150)
-			autoclose()		//TODO: note to self: look into this ~Carn
-	return 1
+/obj/machinery/door/poddoor/shutters/radiation/manual_rotation
+	manual_dir = TRUE
 
-/obj/machinery/door/poddoor/shutters/close()
-	if(operating)
-		return
-	operating = 1
-	flick("shutterc1", src)
-	icon_state = "shutter1"
-	density = 1
-	if(visible)
-		set_opacity(1)
-	air_update_turf(1)
-	update_freelook_sight()
+/obj/machinery/door/poddoor/shutters/radiation/preopen
+	icon_state = "open"
+	density = FALSE
+	opacity = FALSE
+	rad_insulation_beta = RAD_NO_INSULATION
+	rad_insulation_gamma = RAD_NO_INSULATION
 
-	sleep(10)
-	operating = 0
-	return
+/obj/machinery/door/poddoor/shutters/radiation/preopen/manual_rotation
+	manual_dir = TRUE
+
+/obj/machinery/door/poddoor/shutters/radiation/open()
+	. = ..()
+	rad_insulation_beta = RAD_NO_INSULATION
+	rad_insulation_gamma = RAD_NO_INSULATION
+
+/obj/machinery/door/poddoor/shutters/radiation/close()
+	. = ..()
+	rad_insulation_beta = RAD_BETA_BLOCKER
+	rad_insulation_gamma = RAD_VERY_EXTREME_INSULATION

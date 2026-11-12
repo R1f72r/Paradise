@@ -1,54 +1,108 @@
-/* Glass stack types
- * Contains:
- *		Glass sheets
- *		Reinforced glass sheets
- *		Glass shards - TODO: Move this into code/game/object/item/weapons
- *		Plasma Glass Sheets
- *		Reinforced Plasma Glass Sheets (AKA Holy fuck strong windows)
+/* CONTENTS:
+ *	1. GLASS
+ *	2. REINFORCED GLASS
+ *	3. PLASMA GLASS
+ *	4. REINFORCED PLASMA GLASS
+ *	5. TITANIUM GLASS
+ *	6. PLASTITANIUM GLASS
+ *	7. GNESIS GLASS
 
  Todo: Create a unified construct_window(sheet, user, created_window, full_window)
 
  */
 
-/*
- * Glass sheets
- */
+//////////////////////////////
+// MARK: GLASS
+//////////////////////////////
+GLOBAL_LIST_INIT(glass_recipes, list (
+	new /datum/stack_recipe_list("fish", list(
+		new /datum/stack_recipe("wall aquarium", /obj/machinery/fishtank/wall, 4, time = 4 SECONDS, on_floor = TRUE),
+		new /datum/stack_recipe("fish tank", /obj/machinery/fishtank/tank, 3, time = 2 SECONDS, on_floor = TRUE),
+		new /datum/stack_recipe("fishbowl", /obj/machinery/fishtank/bowl, 1, time = 1 SECONDS),
+		)),
+	new /datum/stack_recipe("glass shard", /obj/item/shard, time = 0 SECONDS),
+	new /datum/stack_recipe/window("directional window", /obj/structure/window/basic, time = 1 SECONDS, on_floor = TRUE, window_checks = TRUE),
+	new /datum/stack_recipe/window("fulltile window", /obj/structure/window/full/basic, 2, time = 2 SECONDS, on_floor = TRUE, window_checks = TRUE),
+	new /datum/stack_recipe("glass ashtray", /obj/item/ashtray/glass, 1, time = 1 SECONDS),
+	new /datum/stack_recipe("dropper", /obj/item/reagent_containers/dropper, 1, time = 1 SECONDS),
+))
+
+GLOBAL_LIST_INIT(gnesis_glass_recipes, list (
+	new /datum/stack_recipe("bright shard", /obj/item/shard/gnesis_glass, time = 0 SECONDS),
+	new /datum/stack_recipe/window("directional gnesis window", /obj/structure/window/flock, time = 1 SECONDS, on_floor = TRUE, window_checks = TRUE),
+	new /datum/stack_recipe/window("fulltile gnesis window", /obj/structure/window/flock/fulltile, 2, time = 2 SECONDS, on_floor = TRUE, window_checks = TRUE),
+	new /datum/stack_recipe("gnesis cache", /obj/item/reagent_containers/glass/gnesis, 5, time = 2 SECONDS),
+))
+
 /obj/item/stack/sheet/glass
 	name = "glass"
 	desc = "HOLY SHEET! That is a lot of glass."
-	singular_name = "glass sheet"
 	icon_state = "sheet-glass"
-	materials = list(MAT_GLASS=MINERAL_MATERIAL_AMOUNT)
-	origin_tech = "materials=1"
+	singular_name = "glass sheet"
+	materials = list(MAT_GLASS = MINERAL_MATERIAL_AMOUNT)
+	armor = list(MELEE = 0, BULLET = 0, LASER = 0, ENERGY = 0, BOMB = 0, RAD = 0, FIRE = 50, ACID = 100)
+	resistance_flags = ACID_PROOF
 	created_window = /obj/structure/window/basic
 	full_window = /obj/structure/window/full/basic
 	merge_type = /obj/item/stack/sheet/glass
+	point_value = 1
+	table_type = /obj/structure/table/glass
+
+	solar_mult = 1
+
+/obj/item/stack/sheet/glass/examine(mob/user)
+	. = ..()
+	. += SPAN_NOTICE("Using glass on a floor plating will install glass floor. You can make reinforced glass by combining rods and normal glass sheets.")
+
+/obj/item/stack/sheet/glass/two
+	amount = 2
+
+/obj/item/stack/sheet/glass/five
+	amount = 5
 
 /obj/item/stack/sheet/glass/fifty
 	amount = 50
 
 /obj/item/stack/sheet/glass/cyborg
+	energy_type = /datum/robot_storage/material/glass
+	is_cyborg = TRUE
 	materials = list()
 
-/obj/item/stack/sheet/glass/attack_self(mob/user as mob)
-	construct_window(user)
+/obj/item/stack/sheet/glass/cyborg/examine(mob/user)
+	. = ..()
+	var/mob/living/silicon/robot/robot = user
+	if(!istype(robot.module, /obj/item/robot_module/drone))
+		. += SPAN_NOTICE("You can refill your glass by using your <b>magnetic gripper</b> on the Ore Redemption machine, or by picking it up from the ground.")
 
-/obj/item/stack/sheet/glass/attackby(obj/item/W, mob/user, params)
-	..()
-	if(istype(W,/obj/item/stack/cable_coil))
-		var/obj/item/stack/cable_coil/CC = W
-		if(CC.amount < 5)
-			to_chat(user, "<b>There is not enough wire in this coil. You need 5 lengths.</b>")
-			return
+/obj/item/stack/sheet/glass/cyborg/drone
+	energy_type = /datum/robot_storage/energy/glass
+
+/obj/item/stack/sheet/glass/Initialize(mapload, new_amount, merge)
+	. = ..()
+	recipes = GLOB.glass_recipes
+
+/obj/item/stack/sheet/glass/item_interaction(mob/living/user, obj/item/used, list/modifiers)
+	if(istype(used, /obj/item/stack/cable_coil))
+		var/obj/item/stack/cable_coil/CC = used
+		if(CC.get_amount() < 5)
+			to_chat(user, SPAN_WARNING("[used] doesn't have enough cable! You need 5 lengths."))
+			return ITEM_INTERACT_COMPLETE
+
 		CC.use(5)
-		to_chat(user, "<span class='notice'>You attach wire to the [name].</span>")
-		new /obj/item/stack/light_w(user.loc)
-		src.use(1)
-	else if( istype(W, /obj/item/stack/rods) )
-		var/obj/item/stack/rods/V  = W
+		to_chat(user, SPAN_NOTICE("You attach wire to [src]."))
+		var/obj/item/stack/light_w/wired_tile = new (user.loc)
+		wired_tile.add_fingerprint(user)
+		use(1)
+		return ITEM_INTERACT_COMPLETE
+
+	if(istype(used, /obj/item/stack/rods))
+		var/obj/item/stack/rods/V  = used
+		if(V.get_amount() < 1)
+			to_chat(user, SPAN_WARNING("You need at least one rod to do this!"))
+			return ITEM_INTERACT_COMPLETE
+
 		var/obj/item/stack/sheet/rglass/RG = new (user.loc)
 		RG.add_fingerprint(user)
-		RG.add_to_stacks(user)
 		V.use(1)
 		var/obj/item/stack/sheet/glass/G = src
 		src = null
@@ -56,365 +110,255 @@
 		G.use(1)
 		if(!G && !RG && replace)
 			user.put_in_hands(RG)
-	else
-		return ..()
+		return ITEM_INTERACT_COMPLETE
 
-/obj/item/stack/sheet/glass/proc/construct_window(mob/user as mob)
-	if(!user || !src)	return 0
-	if(!istype(user.loc,/turf)) return 0
-	if(!user.IsAdvancedToolUser())
-		to_chat(user, "<span class='danger'>You don't have the dexterity to do this!</span>")
-		return 0
-	var/title = "Sheet-Glass"
-	title += " ([src.amount] sheet\s left)"
-	switch(input(title, "What would you like to construct?") in list("One Direction Window", "Full Window", "Fishbowl", "Fish Tank", "Wall Aquarium", "Cancel"))
-		if("One Direction Window")
-			if(!src)	return 1
-			if(src.loc != user)	return 1
+	return ..()
 
-			var/list/directions = new/list(cardinal)
-			var/i = 0
-			for(var/obj/structure/window/win in user.loc)
-				i++
-				if(i >= 4)
-					to_chat(user, "<span class='danger'>There are too many windows in this location.</span>")
-					return 1
-				directions-=win.dir
-				if(win.is_fulltile())
-					to_chat(user, "<span class='danger'>Can't let you do that.</span>")
-					return 1
+//////////////////////////////
+// MARK: REINFORCED GLASS
+//////////////////////////////
+GLOBAL_LIST_INIT(reinforced_glass_recipes, list (
+	new /datum/stack_recipe("glass shard", /obj/item/shard, time = 0 SECONDS),
+	new /datum/stack_recipe/window("windoor frame", /obj/structure/windoor_assembly, 5, time = 0 SECONDS, on_floor = TRUE, window_checks = TRUE),
+	null,
+	new /datum/stack_recipe/window("directional reinforced window", /obj/structure/window/reinforced, time = 1 SECONDS, on_floor = TRUE, window_checks = TRUE),
+	new /datum/stack_recipe/window("fulltile reinforced window", /obj/structure/window/full/reinforced, 2, time = 2 SECONDS, on_floor = TRUE, window_checks = TRUE),
+	null,
+	new /datum/stack_recipe/window("directional electrochromic window", /obj/structure/window/reinforced/polarized, 2, time = 1 SECONDS, on_floor = TRUE, window_checks = TRUE),
+	new /datum/stack_recipe/window("fulltile electrochromic window", /obj/structure/window/full/reinforced/polarized, 4, time = 2 SECONDS, on_floor = TRUE, window_checks = TRUE)
+))
 
-			//Determine the direction. It will first check in the direction the person making the window is facing, if it finds an already made window it will try looking at the next cardinal direction, etc.
-			var/dir_to_set = 2
-			for(var/direction in list( user.dir, turn(user.dir,90), turn(user.dir,180), turn(user.dir,270) ))
-				var/found = 0
-				for(var/obj/structure/window/WT in user.loc)
-					if(WT.dir == direction)
-						found = 1
-				if(!found)
-					dir_to_set = direction
-					break
-
-			var/obj/structure/window/W
-			W = new /obj/structure/window/basic( user.loc, 0 )
-			W.dir = dir_to_set
-			W.ini_dir = W.dir
-			W.state = 0
-			W.anchored = 0
-			W.air_update_turf(1)
-			src.use(1)
-		if("Full Window")
-			if(!src)	return 1
-			if(src.loc != user)	return 1
-			if(src.amount < 2)
-				to_chat(user, "<span class='danger'>You need more glass to do that.</span>")
-				return 1
-			if(locate(/obj/structure/window/full) in user.loc)
-				to_chat(user, "<span class='danger'>There is a full window in the way.</span>")
-				return 1
-			var/obj/structure/window/W = new full_window( user.loc, 0 )
-			W.state = 0
-			W.anchored = 0
-			W.air_update_turf(1)
-			src.use(2)
-		if("Fishbowl")
-			if(!src)	return 1
-			if(src.loc != user)	return 1
-			var/obj/machinery/fishtank/F = new /obj/machinery/fishtank/bowl(user.loc, 0)
-			F.air_update_turf(1)
-			src.use(1)
-		if("Fish Tank")
-			if(!src)	return 1
-			if(src.loc != user)	return 1
-			if(src.amount < 3)
-				to_chat(user, "<span class='danger'>You need more glass to do that.</span>")
-				return 1
-			var/obj/machinery/fishtank/F = new /obj/machinery/fishtank/tank(user.loc, 0)
-			F.air_update_turf(1)
-			src.use(3)
-		if("Wall Aquarium")
-			if(!src)	return 1
-			if(src.loc != user)	return 1
-			if(src.amount < 4)
-				to_chat(user, "<span class='danger'>You need more glass to do that.</span>")
-				return 1
-			var/obj/machinery/fishtank/F = new /obj/machinery/fishtank/wall(user.loc, 0)
-			F.air_update_turf(1)
-			src.use(4)
-	return 0
-
-
-/*
- * Reinforced glass sheets
- */
 /obj/item/stack/sheet/rglass
 	name = "reinforced glass"
 	desc = "Glass which seems to have rods or something stuck in them."
 	singular_name = "reinforced glass sheet"
 	icon_state = "sheet-rglass"
-	materials = list(MAT_METAL=MINERAL_MATERIAL_AMOUNT/2, MAT_GLASS=MINERAL_MATERIAL_AMOUNT)
+	materials = list(MAT_METAL = MINERAL_MATERIAL_AMOUNT / 2, MAT_GLASS = MINERAL_MATERIAL_AMOUNT)
+	armor = list(MELEE = 0, BULLET = 0, LASER = 0, ENERGY = 0, BOMB = 0, RAD = 0, FIRE = 70, ACID = 100)
+	resistance_flags = ACID_PROOF
 	origin_tech = "materials=2"
 	created_window = /obj/structure/window/reinforced
 	full_window = /obj/structure/window/full/reinforced
 	merge_type = /obj/item/stack/sheet/rglass
+	point_value = 4
+	table_type = /obj/structure/table/glass/reinforced
+
+	solar_mult = 1.1
+
+/obj/item/stack/sheet/rglass/examine(mob/user)
+	. = ..()
+	. += SPAN_NOTICE("Reinforced glass is much stronger against damage than normal glass, otherwise it functions like normal glass does.")
+
+/obj/item/stack/sheet/rglass/fifty
+	amount = 50
+
+/obj/item/stack/sheet/rglass/Initialize(mapload, new_amount, merge)
+	. = ..()
+	recipes = GLOB.reinforced_glass_recipes
+
+GLOBAL_LIST_INIT(pglass_recipes, list (
+	new /datum/stack_recipe("plasma shard", /obj/item/shard/plasma, time = 0 SECONDS),
+	new /datum/stack_recipe/window("directional window", /obj/structure/window/plasmabasic, time = 1 SECONDS, on_floor = TRUE, window_checks = TRUE),
+	new /datum/stack_recipe/window("fulltile window", /obj/structure/window/full/plasmabasic, 2, time = 2 SECONDS, on_floor = TRUE, window_checks = TRUE)
+))
 
 /obj/item/stack/sheet/rglass/cyborg
+	energy_type = /datum/robot_storage/material/rglass
+	is_cyborg = TRUE
 	materials = list()
 
-/obj/item/stack/sheet/rglass/attack_self(mob/user as mob)
-	construct_window(user)
+/obj/item/stack/sheet/rglass/cyborg/examine(mob/user)
+	. = ..()
+	var/mob/living/silicon/robot/robot = user
+	if(!istype(robot.module, /obj/item/robot_module/drone))
+		. += SPAN_NOTICE("You can refill your reinforced glass by picking it up from the ground.")
 
-/obj/item/stack/sheet/rglass/proc/construct_window(mob/user as mob)
-	if(!user || !src)	return 0
-	if(!istype(user.loc,/turf)) return 0
-	if(!user.IsAdvancedToolUser())
-		to_chat(user, "<span class='danger'>You don't have the dexterity to do this!</span>")
-		return 0
-	var/title = "Sheet Reinf. Glass"
-	title += " ([src.amount] sheet\s left)"
-	switch(input(title, "Would you like full tile glass a one direction glass pane or a windoor?") in list("One Direction", "Full Window", "Windoor", "Cancel"))
-		if("One Direction")
-			if(!src)	return 1
-			if(src.loc != user)	return 1
-			var/list/directions = new/list(cardinal)
-			var/i = 0
-			for(var/obj/structure/window/win in user.loc)
-				i++
-				if(i >= 4)
-					to_chat(user, "<span class='danger'>There are too many windows in this location.</span>")
-					return 1
-				directions-=win.dir
-				if(win.is_fulltile())
-					to_chat(user, "<span class='danger'>Can't let you do that.</span>")
-					return 1
+/obj/item/stack/sheet/rglass/cyborg/drone
+	energy_type = /datum/robot_storage/energy/rglass
 
-			//Determine the direction. It will first check in the direction the person making the window is facing, if it finds an already made window it will try looking at the next cardinal direction, etc.
-			var/dir_to_set = 2
-			for(var/direction in list( user.dir, turn(user.dir,90), turn(user.dir,180), turn(user.dir,270) ))
-				var/found = 0
-				for(var/obj/structure/window/WT in user.loc)
-					if(WT.dir == direction)
-						found = 1
-				if(!found)
-					dir_to_set = direction
-					break
-
-			var/obj/structure/window/W
-			W = new /obj/structure/window/reinforced( user.loc, 1 )
-			W.state = 0
-			W.dir = dir_to_set
-			W.ini_dir = W.dir
-			W.anchored = 0
-			src.use(1)
-
-		if("Full Window")
-			if(!src)	return 1
-			if(src.loc != user)	return 1
-			if(src.amount < 2)
-				to_chat(user, "<span class='danger'>You need more glass to do that.</span>")
-				return 1
-			if(locate(/obj/structure/window/full) in user.loc)
-				to_chat(user, "<span class='danger'>There is a window in the way.</span>")
-				return 1
-			var/obj/structure/window/W = new full_window( user.loc, 0 )
-			W.state = 0
-			W.anchored = 0
-			src.use(2)
-
-		if("Windoor")
-			if(!src || src.loc != user) return 1
-
-			if(isturf(user.loc) && locate(/obj/structure/windoor_assembly/, user.loc))
-				to_chat(user, "<span class='danger'>There is already a windoor assembly in that location.</span>")
-				return 1
-
-			if(isturf(user.loc) && locate(/obj/machinery/door/window/, user.loc))
-				to_chat(user, "<span class='danger'>There is already a windoor in that location.</span>")
-				return 1
-
-			if(src.amount < 5)
-				to_chat(user, "<span class='danger'>You need more glass to do that.</span>")
-				return 1
-
-			var/obj/structure/windoor_assembly/WD
-			WD = new /obj/structure/windoor_assembly(user.loc)
-			WD.state = "01"
-			WD.anchored = 0
-			src.use(5)
-			switch(user.dir)
-				if(SOUTH)
-					WD.dir = SOUTH
-					WD.ini_dir = SOUTH
-				if(EAST)
-					WD.dir = EAST
-					WD.ini_dir = EAST
-				if(WEST)
-					WD.dir = WEST
-					WD.ini_dir = WEST
-				else//If the user is facing northeast. northwest, southeast, southwest or north, default to north
-					WD.dir = NORTH
-					WD.ini_dir = NORTH
-		else
-			return 1
-
-
-	return 0
-
-
+//////////////////////////////
+// MARK: PLASMA GLASS
+//////////////////////////////
 /obj/item/stack/sheet/plasmaglass
 	name = "plasma glass"
-	desc = "A very strong and very resistant sheet of a plasma-glass alloy."
+	desc = "A very strong and very resistant sheet of a plasma-glass mixture."
 	singular_name = "glass sheet"
 	icon_state = "sheet-plasmaglass"
-	materials = list(MAT_GLASS=MINERAL_MATERIAL_AMOUNT*2)
+	materials = list(MAT_PLASMA = MINERAL_MATERIAL_AMOUNT, MAT_GLASS = MINERAL_MATERIAL_AMOUNT)
+	armor = list(MELEE = 0, BULLET = 0, LASER = 0, ENERGY = 0, BOMB = 0, RAD = 0, FIRE = 75, ACID = 100)
+	resistance_flags = ACID_PROOF
 	origin_tech = "plasmatech=2;materials=2"
 	created_window = /obj/structure/window/plasmabasic
 	full_window = /obj/structure/window/full/plasmabasic
+	point_value = 19
+	table_type = /obj/structure/table/glass/plasma
 
+	solar_mult = 1.7
+	solar_type = SOLAR_TYPE_PLASMA
 
-/obj/item/stack/sheet/plasmaglass/attack_self(mob/user as mob)
-	construct_window(user)
+/obj/item/stack/sheet/plasmaglass/examine_more(mob/user)
+	. = ..()
+	. += "A mixture of silica glass and plasma. The plasma forces the normally amorphous glass to assume a regular crystal structure. The plasma encourges heavy cross-linking, \
+	massively improving the strength of the glass whilst also giving it exceptional thermal resistance. The denser molecular structure is also better at blocking radiation."
+	. += ""
+	. += "Unlike metal alloys incorporating plasma, plasma glass is not common - the secrets of producing it are a closely guarded trade secret of Nanotrasen, \
+	very demanding conditions are required to correctly combine plasma and silica, and without this knowledge the process is fraught with great risk of igniting the plasma and (at best) destroying the production equipment."
+	. += ""
+	. += "Despite plastitanium glass being a structurally more robust material, pure plasma glass has some unique properties that Nanotrasen exploits in some of its experimental energy weapons, such as the immolator laser."
 
-/obj/item/stack/sheet/plasmaglass/attackby(obj/item/W, mob/user, params)
-	..()
-	if( istype(W, /obj/item/stack/rods) )
-		var/obj/item/stack/rods/V  = W
-		var/obj/item/stack/sheet/plasmarglass/RG = new (user.loc)
-		RG.add_fingerprint(user)
-		RG.add_to_stacks(user)
-		V.use(1)
-		var/obj/item/stack/sheet/glass/G = src
-		src = null
-		var/replace = (user.get_inactive_hand()==G)
-		G.use(1)
-		if(!G && !RG && replace)
-			user.put_in_hands(RG)
-	else
+/obj/item/stack/sheet/plasmaglass/fifty
+	amount = 50
+
+/obj/item/stack/sheet/plasmaglass/Initialize(mapload, new_amount, merge)
+	. = ..()
+	recipes = GLOB.pglass_recipes
+
+/obj/item/stack/sheet/plasmaglass/item_interaction(mob/living/user, obj/item/used, list/modifiers)
+	if(!istype(used, /obj/item/stack/rods))
 		return ..()
 
-/obj/item/stack/sheet/plasmaglass/proc/construct_window(mob/user as mob)
-	if(!user || !src)  return 0
-	if(!istype(user.loc,/turf)) return 0
-	if(!user.IsAdvancedToolUser())
-		to_chat(user, "<span class='danger'> You don't have the dexterity to do this!")
-		return 0
-	var/title = "Plasma-glass alloy"
-	title += " ([src.amount] sheet\s left)"
-	switch(alert(title, "Would you like full tile glass or one direction?", "One Direction", "Full Window", "Cancel", null))
-		if("One Direction")
-			if(!src)  return 1
-			if(src.loc != user)  return 1
-			var/list/directions = new/list(cardinal)
-			var/i = 0
-			for(var/obj/structure/window/win in user.loc)
-				i++
-				if(i >= 4)
-					to_chat(user, "<span class='danger'>There are too many windows in this location.</span>")
-					return 1
-				directions-=win.dir
-				if(!(win.ini_dir in cardinal))
-					to_chat(user, "<span class='danger'>Can't let you do that.</span>")
-					return 1
-			//Determine the direction. It will first check in the direction the person making the window is facing, if it finds an already made window it will try looking at the next cardinal direction, etc.
-			var/dir_to_set = 2
-			for(var/direction in list( user.dir, turn(user.dir,90), turn(user.dir,180), turn(user.dir,270) ))
-				var/found = 0
-				for(var/obj/structure/window/WT in user.loc)
-					if(WT.dir == direction)
-						found = 1
-				if(!found)
-					dir_to_set = direction
-					break
-			var/obj/structure/window/W
-			W = new /obj/structure/window/plasmabasic( user.loc, 0 )
-			W.dir = dir_to_set
-			W.ini_dir = W.dir
-			W.state = 0
-			W.anchored = 0
-			src.use(1)
-		if("Full Window")
-			if(!src)  return 1
-			if(src.loc != user)  return 1
-			if(src.amount < 2)
-				to_chat(user, "<span class='danger'>You need more glass to do that.</span>")
-				return 1
-			if(locate(/obj/structure/window) in user.loc)
-				to_chat(user, "<span class='danger'>There is a window in the way.</span>")
-				return 1
-			var/obj/structure/window/W = new full_window( user.loc, 0 )
-			W.state = 0
-			W.anchored = 0
-			src.use(2)
-	return 0
+	var/obj/item/stack/rods/V  = used
+	var/obj/item/stack/sheet/plasmarglass/RG = new (user.loc)
+	RG.add_fingerprint(user)
+	V.use(1)
+	var/obj/item/stack/sheet/glass/G = src
+	src = null
+	var/replace = (user.get_inactive_hand() == G)
+	G.use(1)
+	if(!G && !RG && replace)
+		user.put_in_hands(RG)
+	return ITEM_INTERACT_COMPLETE
 
-/*
- * Reinforced plasma glass sheets
- */
+//////////////////////////////
+// MARK: REINFORCED PLASMA GLASS
+//////////////////////////////
+
+GLOBAL_LIST_INIT(prglass_recipes, list (
+	new /datum/stack_recipe("plasma shard", /obj/item/shard/plasma, time = 0 SECONDS),
+	new /datum/stack_recipe/window("directional reinforced window", /obj/structure/window/plasmareinforced, time = 1 SECONDS, on_floor = TRUE, window_checks = TRUE),
+	new /datum/stack_recipe/window("fulltile reinforced window", /obj/structure/window/full/plasmareinforced, 2, time = 2 SECONDS, on_floor = TRUE, window_checks = TRUE)
+))
+
 /obj/item/stack/sheet/plasmarglass
 	name = "reinforced plasma glass"
 	desc = "Plasma glass which seems to have rods or something stuck in them."
 	singular_name = "reinforced plasma glass sheet"
 	icon_state = "sheet-plasmarglass"
-	materials = list(MAT_METAL=MINERAL_MATERIAL_AMOUNT/2, MAT_GLASS=MINERAL_MATERIAL_AMOUNT*2)
+	materials = list(MAT_METAL = MINERAL_MATERIAL_AMOUNT / 2, MAT_PLASMA = MINERAL_MATERIAL_AMOUNT, MAT_GLASS = MINERAL_MATERIAL_AMOUNT)
+	armor = list(MELEE = 20, BULLET = 0, LASER = 0, ENERGY = 0, BOMB = 0, RAD = 0, FIRE = 80, ACID = 100)
+	resistance_flags = ACID_PROOF
 	origin_tech = "plasmatech=2;materials=2"
 	created_window = /obj/structure/window/plasmareinforced
 	full_window = /obj/structure/window/full/plasmareinforced
+	point_value = 23
+	table_type = /obj/structure/table/glass/reinforced/plasma
 
+	solar_mult = 1.8
+	solar_type = SOLAR_TYPE_PLASMA
 
-/obj/item/stack/sheet/plasmarglass/attack_self(mob/user as mob)
-	construct_window(user)
+/obj/item/stack/sheet/plasmarglass/examine_more(mob/user)
+	. = ..()
+	. += "A mixture of silica glass and plasma. The plasma forces the normally amorphous glass to assume a regular crystal structure. The plasma encourges heavy cross-linking, \
+	massively improving the strength of the glass whilst also giving it exceptional thermal resistance. The denser molecular structure is also better at blocking radiation."
+	. += ""
+	. += "Unlike metal alloys incorporating plasma, plasma glass is not common - the secrets of producing it are a closely guarded trade secret of Nanotrasen, \
+	very demanding conditions are required to correctly combine plasma and silica, and without this knowledge the process is fraught with great risk of igniting the plasma and (at best) destroying the production equipment."
+	. += ""
+	. += "Despite plastitanium glass being a structurally more robust material, pure plasma glass has some unique properties that Nanotrasen exploits in some of its experimental energy weapons, such as the immolator laser."
 
-/obj/item/stack/sheet/plasmarglass/proc/construct_window(mob/user as mob)
-	if(!user || !src)  return 0
-	if(!istype(user.loc,/turf)) return 0
-	if(!user.IsAdvancedToolUser())
-		to_chat(user, "<span class='danger'>You don't have the dexterity to do this!</span>")
-		return 0
-	var/title = "Reinforced plasma-glass alloy"
-	title += " ([src.amount] sheet\s left)"
-	switch(alert(title, "Would you like full tile glass or one direction?", "One Direction", "Full Window", "Cancel", null))
-		if("One Direction")
-			if(!src)  return 1
-			if(src.loc != user)  return 1
-			var/list/directions = new/list(cardinal)
-			var/i = 0
-			for(var/obj/structure/window/win in user.loc)
-				i++
-				if(i >= 4)
-					to_chat(user, "<span class='danger'>There are too many windows in this location.</span>")
-					return 1
-				directions-=win.dir
-				if(!(win.ini_dir in cardinal))
-					to_chat(user, "<span class='danger'>Can't let you do that.</span>")
-					return 1
-			//Determine the direction. It will first check in the direction the person making the window is facing, if it finds an already made window it will try looking at the next cardinal direction, etc.
-			var/dir_to_set = 2
-			for(var/direction in list( user.dir, turn(user.dir,90), turn(user.dir,180), turn(user.dir,270) ))
-				var/found = 0
-				for(var/obj/structure/window/WT in user.loc)
-					if(WT.dir == direction)
-						found = 1
-				if(!found)
-					dir_to_set = direction
-					break
-			var/obj/structure/window/W
-			W = new /obj/structure/window/plasmareinforced( user.loc, 0 )
-			W.dir = dir_to_set
-			W.ini_dir = W.dir
-			W.state = 0
-			W.anchored = 0
-			src.use(1)
-		if("Full Window")
-			if(!src)  return 1
-			if(src.loc != user)  return 1
-			if(src.amount < 2)
-				to_chat(user, "<span class='danger'>You need more glass to do that.</span>")
-				return 1
-			if(locate(/obj/structure/window) in user.loc)
-				to_chat(user, "<span class='danger'>There is a window in the way.</span>")
-				return 1
-			var/obj/structure/window/W = new full_window( user.loc, 0 )
-			W.state = 0
-			W.anchored = 0
-			src.use(2)
-	return 0
+/obj/item/stack/sheet/plasmarglass/fifty
+	amount = 50
+
+/obj/item/stack/sheet/plasmarglass/Initialize(mapload, new_amount, merge)
+	. = ..()
+	recipes = GLOB.prglass_recipes
+
+GLOBAL_LIST_INIT(titaniumglass_recipes, list(
+	new /datum/stack_recipe/window("shuttle window", /obj/structure/window/full/shuttle, 2, time = 2 SECONDS, on_floor = TRUE, window_checks = TRUE)
+	))
+
+//////////////////////////////
+// MARK: TITANIUM GLASS
+//////////////////////////////
+/obj/item/stack/sheet/titaniumglass
+	name = "titanium glass"
+	desc = "A glass sheet made out of titanium silicate."
+	singular_name = "titanium glass sheet"
+	icon_state = "sheet-titaniumglass"
+	materials = list(MAT_TITANIUM = MINERAL_MATERIAL_AMOUNT, MAT_GLASS = MINERAL_MATERIAL_AMOUNT)
+	armor = list(MELEE = 0, BULLET = 0, LASER = 0, ENERGY = 0, BOMB = 0, RAD = 0, FIRE = 80, ACID = 100)
+	resistance_flags = ACID_PROOF
+	merge_type = /obj/item/stack/sheet/titaniumglass
+	full_window = /obj/structure/window/full/shuttle
+	table_type = /obj/structure/table/glass/reinforced/titanium
+
+/obj/item/stack/sheet/titaniumglass/examine_more(mob/user)
+	. = ..()
+	. += "Titanium-silica mixes are an old but highly effective technology that produce a relatively lightweight, very strong glass that can withstand a good amount of punishment."
+	. += ""
+	. += "It is extensively used in the production of starship viewports and transparent armour, and is notably used extensively in space station construction by the USSP."
+
+/obj/item/stack/sheet/titaniumglass/fifty
+	amount = 50
+
+/obj/item/stack/sheet/titaniumglass/Initialize(mapload, new_amount, merge)
+	. = ..()
+	recipes = GLOB.titaniumglass_recipes
+
+GLOBAL_LIST_INIT(plastitaniumglass_recipes, list(
+	new /datum/stack_recipe("plastitanium shard", /obj/item/shard/plastitanium, time = 0 SECONDS),
+	new /datum/stack_recipe/window("directional plastitanium window", /obj/structure/window/plastitanium, 1, time = 1 SECONDS, on_floor = TRUE, window_checks = TRUE),
+	new /datum/stack_recipe/window("fulltile plastitanium window", /obj/structure/window/full/plastitanium, 2, time = 2 SECONDS, on_floor = TRUE, window_checks = TRUE),
+	))
+
+//////////////////////////////
+// MARK: PLASTITANIUM GLASS
+//////////////////////////////
+/obj/item/stack/sheet/plastitaniumglass
+	name = "plastitanium glass"
+	desc = "A glass sheet made out of a plasma-titanium-silica mixture."
+	singular_name = "plastitanium glass sheet"
+	icon_state = "sheet-plastitaniumglass"
+	materials = list(MAT_TITANIUM = MINERAL_MATERIAL_AMOUNT, MAT_PLASMA = MINERAL_MATERIAL_AMOUNT, MAT_GLASS = MINERAL_MATERIAL_AMOUNT)
+	armor = list(MELEE = 0, BULLET = 0, LASER = 0, ENERGY = 0, BOMB = 0, RAD = 0, FIRE = 80, ACID = 100)
+	resistance_flags = ACID_PROOF
+	merge_type = /obj/item/stack/sheet/plastitaniumglass
+	created_window = /obj/structure/window/plastitanium
+	full_window = /obj/structure/window/full/plastitanium
+	table_type = /obj/structure/table/glass/reinforced/plastitanium
+
+	solar_mult = 2.4
+	solar_type = SOLAR_TYPE_PLASTITANIUM
+
+/obj/item/stack/sheet/plastitaniumglass/examine_more(mob/user)
+	. = ..()
+	. += "A mixture of silica glass, and plastitanium. It boasts similar material properties to plastitanium whilst also being optically transparent."
+	. += ""
+	. += "Unlike regular plasma glass, the production process of plastitanium glass is relatively safer and better known, as the titanium helps to control the plasma's reactivity whilst it is being mixed with the silica. \
+	It is extensively employed for military-grade transparent armour and optics."
+
+/obj/item/stack/sheet/plastitaniumglass/fifty
+	amount = 50
+
+/obj/item/stack/sheet/plastitaniumglass/Initialize(mapload, new_amount, merge)
+	. = ..()
+	recipes = GLOB.plastitaniumglass_recipes
+
+//////////////////////////////
+// MARK: GNESIS GLASS
+//////////////////////////////
+/obj/item/stack/sheet/gnesis_glass
+	name = "transculent wafers"
+	singular_name = "transculent wafer"
+	desc = "A rare, complex crystalline matrix with a lazily shifting internal structure. The layers are arranged to let light through."
+	icon_state = "gnesisglass"
+	materials = list(MAT_GNESIS_GLASS = MINERAL_MATERIAL_AMOUNT)
+	merge_type = /obj/item/stack/sheet/gnesis_glass
+	armor = list(MELEE = 20, BULLET = 20, LASER = 0, ENERGY = 100, BOMB = 0, RAD = 50, FIRE = 100, ACID = 20)
+	resistance_flags = FIRE_PROOF
+	point_value = 5
+	dynamic_icon_state = FALSE
+
+/obj/item/stack/sheet/gnesis_glass/Initialize(mapload, new_amount, merge)
+	. = ..()
+	recipes = GLOB.gnesis_glass_recipes

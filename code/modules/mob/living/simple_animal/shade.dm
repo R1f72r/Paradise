@@ -1,11 +1,12 @@
 /mob/living/simple_animal/shade
 	name = "Shade"
 	real_name = "Shade"
-	desc = "A bound spirit"
-	icon = 'icons/mob/mob.dmi'
+	desc = "A bound spirit."
+	icon = 'icons/mob/cult.dmi'
 	icon_state = "shade"
 	icon_living = "shade"
 	icon_dead = "shade_dead"
+	mob_biotypes = MOB_SPIRIT
 	maxHealth = 50
 	health = 50
 	speak_emote = list("hisses")
@@ -20,34 +21,64 @@
 	maxbodytemp = 4000
 	atmos_requirements = list("min_oxy" = 0, "max_oxy" = 0, "min_tox" = 0, "max_tox" = 0, "min_co2" = 0, "max_co2" = 0, "min_n2" = 0, "max_n2" = 0)
 	speed = -1
-	stop_automated_movement = 1
-	status_flags = 0
+	stop_automated_movement = TRUE
+	pull_force = 0
+	see_invisible = SEE_INVISIBLE_HIDDEN_RUNES
+	universal_speak = TRUE
 	faction = list("cult")
-	status_flags = CANPUSH
-	loot = list(/obj/item/weapon/reagent_containers/food/snacks/ectoplasm)
-	del_on_death = 1
+	loot = list(/obj/item/food/ectoplasm)
+	del_on_death = TRUE
 	deathmessage = "lets out a contented sigh as their form unwinds."
+	initial_traits = list(TRAIT_FLYING, TRAIT_SHOCKIMMUNE)
+	var/holy = FALSE
 
+/mob/living/simple_animal/shade/item_interaction(mob/living/user, obj/item/O, list/modifiers)
+	if(istype(O, /obj/item/soulstone))
+		var/obj/item/soulstone/SS = O
+		SS.transfer_soul("SHADE", src, user)
+		return ITEM_INTERACT_COMPLETE
 
-	attackby(var/obj/item/O as obj, var/mob/user as mob)  //Marker -Agouri
-		if(istype(O, /obj/item/device/soulstone))
-			O.transfer_soul("SHADE", src, user)
-		else
-			if(O.force)
-				var/damage = O.force
-				if(O.damtype == STAMINA)
-					damage = 0
-				health -= damage
-				for(var/mob/M in viewers(src, null))
-					if((M.client && !( M.blinded )))
-						M.show_message("<span class='boldwarning'>[src] has been attacked with the [O] by [user]. </span>")
-			else
-				to_chat(usr, "<span class='warning'>This weapon is ineffective, it does no damage.</span>")
-				for(var/mob/M in viewers(src, null))
-					if((M.client && !( M.blinded )))
-						M.show_message("<span class='warning'>[user] gently taps [src] with the [O]. </span>")
-		return
+/mob/living/simple_animal/shade/Process_Spacemove(movement_dir = 0, continuous_move = FALSE)
+	return TRUE
+
+/mob/living/simple_animal/shade/holy
+	holy = TRUE
+	icon_state = "shade_angelic"
+
+/mob/living/simple_animal/shade/cult
+
+/mob/living/simple_animal/shade/cult/Initialize(mapload)
+	. = ..()
+	icon_state = GET_CULT_DATA(shade_icon_state, initial(icon_state))
 
 /mob/living/simple_animal/shade/sword
-	universal_speak = 1
 	faction = list("neutral")
+	a_intent = INTENT_HARM // scuffed sword mechanics bad
+	can_change_intents = FALSE // same here
+	health = 100
+	maxHealth = 100
+	weather_immunities = list("ash")
+	hud_type = /datum/hud/sword
+
+/mob/living/simple_animal/shade/sword/Initialize(mapload)
+	.=..()
+	AddSpell(new /datum/spell/sentient_sword_lunge)
+	var/obj/item/nullrod/scythe/talking/host_sword = loc
+	if(istype(host_sword))
+		health = host_sword.obj_integrity
+
+/mob/living/simple_animal/shade/sword/generic_item
+	name = "Trapped spirit"
+
+/mob/living/simple_animal/shade/sword/generic_item/update_runechat_msg_location()
+	runechat_msg_location = loc.UID()
+
+/mob/living/simple_animal/shade/sword/generic_item/proc/handle_item_deletion(source)
+	SIGNAL_HANDLER
+	qdel(src)
+
+/mob/living/simple_animal/shade/update_runechat_msg_location()
+	if(istype(loc, /obj/item/soulstone) || istype(loc, /obj/item/nullrod/scythe/talking))
+		runechat_msg_location = loc.UID()
+	else
+		return ..()

@@ -3,7 +3,6 @@
 	desc = "The first three prototypes were discontinued after mass casualty incidents."
 	icon = 'icons/obj/lighting.dmi'
 	icon_state = "disco0"
-	anchored = FALSE
 	atom_say_verb = "states"
 	density = TRUE
 	var/active = FALSE
@@ -19,13 +18,15 @@
 		new /datum/track("Engineering's Ultimate High-Energy Hustle",	'sound/misc/boogie2.ogg',	1770, 	5),
 		)
 	var/datum/track/selection = null
+	/// If set to FALSE, the dance4 proc that rests the dancer will be replaced by dance2.
+	var/restdancing = TRUE
+	var/list/available = list()
 
 /datum/track
 	var/song_name = "generic"
 	var/song_path = null
 	var/song_length = 0
 	var/song_beat = 0
-	var/GBP_required = 0
 
 /datum/track/New(name, path, length, beat)
 	song_name = name
@@ -34,9 +35,6 @@
 	song_beat = beat
 
 /obj/machinery/disco/proc/add_track(file, name, length, beat)
-	var/sound/S = file
-	if(!istype(S))
-		return
 	if(!name)
 		name = "[file]"
 	if(!beat)
@@ -45,108 +43,95 @@
 		length = 2400 //Unless there's a way to discern via BYOND.
 	var/datum/track/T = new /datum/track(name, file, length, beat)
 	songs += T
+	available += T.song_name
 
-/obj/machinery/disco/New()
+/obj/machinery/disco/Initialize(mapload)
 	. = ..()
+	for(var/datum/track/S in songs)
+		available += S.song_name
 	selection = songs[1]
 
 
 /obj/machinery/disco/Destroy()
 	dance_over()
 	selection = null
+	STOP_PROCESSING(SSobj, src)
 	return ..()
 
-/obj/machinery/disco/attackby(obj/item/O, mob/user, params)
-	if(!active)
-		if(iswrench(O))
-			if(!anchored && !isinspace())
-				to_chat(user,"<span class='notice'>You secure [src] to the floor.</span>")
-				anchored = TRUE
-			else if(anchored)
-				to_chat(user,"<span class='notice'>You unsecure and disconnect [src].</span>")
-				anchored = FALSE
-			playsound(src, 'sound/items/deconstruct.ogg', 50, 1)
-			return
-	return ..()
+/obj/machinery/disco/wrench_act(mob/user, obj/item/I)
+	if(active)
+		return
+	. = TRUE
+	if(!I.use_tool(src, user, 0, volume = I.tool_volume))
+		return
+	if(!anchored && !isinspace())
+		anchored = TRUE
+		WRENCH_ANCHOR_MESSAGE
+	else if(anchored)
+		anchored = FALSE
+		WRENCH_UNANCHOR_MESSAGE
+	playsound(src, 'sound/items/deconstruct.ogg', 50, 1)
 
-/obj/machinery/disco/update_icon()
+/obj/machinery/disco/update_icon_state()
 	if(active)
 		icon_state = "disco1"
 	else
 		icon_state = "disco0"
-	..()
 
+/obj/machinery/disco/update_overlays()
+	. = ..()
+	underlays.Cut()
+
+	if(active)
+		underlays += emissive_appearance(icon, "disco_lightmask")
 
 /obj/machinery/disco/attack_hand(mob/user)
 	if(..())
 		return
-
-	interact(user)
-
-/obj/machinery/disco/interact(mob/user)
 	if(!anchored)
-		to_chat(user,"<span class='warning'>This device must be anchored by a wrench!</span>")
+		to_chat(user,SPAN_WARNING("This device must be anchored by a wrench!"))
 		return
-	if(!Adjacent(user) && !isAI(user))
+	if(!Adjacent(user) && !is_ai(user))
 		return
-	user.set_machine(src)
-	var/list/dat = list()
-	dat +="<div class='statusDisplay' style='text-align:center'>"
-	dat += "<b><A href='?src=[UID()];action=toggle'>[!active ? "BREAK IT DOWN" : "SHUT IT DOWN"]<b></A><br>"
-	dat += "</div><br>"
-	dat += "<A href='?src=[UID()];action=select'> Select Track</A><br>"
-	dat += "Track Selected: [selection.song_name]<br>"
-	dat += "Track Length: [DisplayTimeText(selection.song_length)]<br><br>"
-	dat += "<br>DJ's Soundboard:<b><br>"
-	dat +="<div class='statusDisplay'><div style='text-align:center'>"
-	dat += "<A href='?src=[UID()];action=horn'>Air Horn</A>  "
-	dat += "<A href='?src=[UID()];action=alert'>Station Alert</A>  "
-	dat += "<A href='?src=[UID()];action=siren'>Warning Siren</A>  "
-	dat += "<A href='?src=[UID()];action=honk'>Honk</A><br>"
-	dat += "<A href='?src=[UID()];action=pump'>Shotgun Pump</A>"
-	dat += "<A href='?src=[UID()];action=pop'>Gunshot</A>"
-	dat += "<A href='?src=[UID()];action=saber'>Esword</A>"
-	dat += "<A href='?src=[UID()];action=harm'>Harm Alarm</A>"
-	var/datum/browser/popup = new(user, "vending", "Radiance Dance Machine - Mark IV", 400, 350)
-	popup.set_content(dat.Join())
-	popup.open()
+	add_fingerprint(user)
+	ui_interact(user)
 
+/obj/machinery/disco/ui_interact(mob/user, datum/tgui/ui)
+	ui = SStgui.try_update_ui(user, src, ui)
+	if(!ui)
+		ui = new(user, src, "DanceMachine", "Radiant Dance Machine Mk. IV")
+		ui.open()
 
-/obj/machinery/disco/Topic(href, href_list)
+/obj/machinery/disco/ui_data(mob/user)
+	var/list/data = list()
+	data["active"] = active
+	data["selectedSong"] = selection.song_name
+	data["songLength"] = selection.song_length
+	data["charge"] = charge
+	data["available"] = available
+	data["onCooldown"] = !active && stop > world.time
+	return data
+
+/obj/machinery/disco/ui_act(action, params)
 	if(..())
 		return
-	add_fingerprint(usr)
-	switch(href_list["action"])
+	switch(action)
 		if("toggle")
-			if(qdeleted(src))
-				return
 			if(!active)
 				if(stop > world.time)
-					to_chat(usr, "<span class='warning'>Error: The device is still resetting from the last activation, it will be ready again in [DisplayTimeText(stop-world.time)].</span>")
-					playsound(src, 'sound/misc/compiler-failure.ogg', 50, 1)
 					return
-				active = TRUE
-				update_icon()
-				dance_setup()
-				processing_objects.Add(src)
-				lights_spin()
-				updateUsrDialog()
+				breakitdown()
 			else if(active)
 				stop = 0
-				updateUsrDialog()
 		if("select")
-			if(active)
-				to_chat(usr, "<span class='warning'>Error: You cannot change the song until the current one is over.</span>")
+			var/song_name = params["selectedSong"]
+			if(!song_name)
 				return
-
-			var/list/available = list()
 			for(var/datum/track/S in songs)
-				available[S.song_name] = S
-			var/selected = input(usr, "Choose your song", "Track:") as null|anything in available
-			if(qdeleted(src) || !selected || !istype(available[selected], /datum/track))
+				if(S.song_name == song_name)
+					selection = S
+			if(!selection)
 				return
-			selection = available[selected]
-			updateUsrDialog()
 		if("horn")
 			deejay('sound/items/airhorn2.ogg')
 		if("alert")
@@ -156,17 +141,28 @@
 		if("honk")
 			deejay('sound/items/bikehorn.ogg')
 		if("pump")
-			deejay('sound/weapons/shotgunpump.ogg')
+			deejay('sound/weapons/gun_interactions/shotgunpump.ogg')
 		if("pop")
-			deejay('sound/weapons/gunshot3.ogg')
+			deejay('sound/weapons/gunshots/gunshot3.ogg')
 		if("saber")
 			deejay('sound/weapons/saberon.ogg')
 		if("harm")
-			deejay('sound/ai/harmalarm.ogg')
+			deejay('sound/AI/harmalarm.ogg')
+	return TRUE
+
+/**
+ * Starts the dance machine.
+ */
+/obj/machinery/disco/proc/breakitdown()
+	active = TRUE
+	update_icon()
+	set_light(1, LIGHTING_MINIMUM_POWER)
+	dance_setup()
+	START_PROCESSING(SSobj, src)
+	lights_spin()
 
 /obj/machinery/disco/proc/deejay(S)
-	if(qdeleted(src) || !active || charge < 5)
-		to_chat(usr, "<span class='warning'>The device is not able to play more DJ sounds at this time.</span>")
+	if(QDELETED(src) || !active || charge < 5)
 		return
 	charge -= 5
 	playsound(src, S, 300, 1)
@@ -176,56 +172,56 @@
 	var/turf/cen = get_turf(src)
 	FOR_DVIEW(var/turf/t, 3, get_turf(src),INVISIBILITY_LIGHTING)
 		if(t.x == cen.x && t.y > cen.y)
-			var/obj/item/device/flashlight/spotlight/L = new /obj/item/device/flashlight/spotlight(t)
+			var/obj/item/flashlight/spotlight/L = new /obj/item/flashlight/spotlight(t)
 			L.light_color = "red"
 			L.light_power = 30 - (get_dist(src, L) * 8)
 			L.range = 1+get_dist(src, L)
 			spotlights+=L
 			continue
 		if(t.x == cen.x && t.y < cen.y)
-			var/obj/item/device/flashlight/spotlight/L = new /obj/item/device/flashlight/spotlight(t)
+			var/obj/item/flashlight/spotlight/L = new /obj/item/flashlight/spotlight(t)
 			L.light_color = "purple"
 			L.light_power = 30 - (get_dist(src, L) * 8)
 			L.range = 1+get_dist(src, L)
 			spotlights+=L
 			continue
 		if(t.x > cen.x && t.y == cen.y)
-			var/obj/item/device/flashlight/spotlight/L = new /obj/item/device/flashlight/spotlight(t)
+			var/obj/item/flashlight/spotlight/L = new /obj/item/flashlight/spotlight(t)
 			L.light_color = "#ffff00"
 			L.light_power = 30 - (get_dist(src, L) * 8)
 			L.range = 1+get_dist(src, L)
 			spotlights+=L
 			continue
 		if(t.x < cen.x && t.y == cen.y)
-			var/obj/item/device/flashlight/spotlight/L = new /obj/item/device/flashlight/spotlight(t)
+			var/obj/item/flashlight/spotlight/L = new /obj/item/flashlight/spotlight(t)
 			L.light_color = "green"
 			L.light_power = 30 - (get_dist(src, L) * 8)
 			L.range = 1+get_dist(src, L)
 			spotlights+=L
 			continue
 		if((t.x+1 == cen.x && t.y+1 == cen.y) || (t.x+2==cen.x && t.y+2 == cen.y))
-			var/obj/item/device/flashlight/spotlight/L = new /obj/item/device/flashlight/spotlight(t)
+			var/obj/item/flashlight/spotlight/L = new /obj/item/flashlight/spotlight(t)
 			L.light_color = "sw"
 			L.light_power = 30 - (get_dist(src, L) * 8)
 			L.range = 1.4+get_dist(src, L)
 			spotlights+=L
 			continue
 		if((t.x-1 == cen.x && t.y-1 == cen.y) || (t.x-2==cen.x && t.y-2 == cen.y))
-			var/obj/item/device/flashlight/spotlight/L = new /obj/item/device/flashlight/spotlight(t)
+			var/obj/item/flashlight/spotlight/L = new /obj/item/flashlight/spotlight(t)
 			L.light_color = "ne"
 			L.light_power = 30 - (get_dist(src, L) * 8)
 			L.range = 1.4+get_dist(src, L)
 			spotlights+=L
 			continue
 		if((t.x-1 == cen.x && t.y+1 == cen.y) || (t.x-2==cen.x && t.y+2 == cen.y))
-			var/obj/item/device/flashlight/spotlight/L = new /obj/item/device/flashlight/spotlight(t)
+			var/obj/item/flashlight/spotlight/L = new /obj/item/flashlight/spotlight(t)
 			L.light_color = "se"
 			L.light_power = 30 - (get_dist(src, L) * 8)
 			L.range = 1.4+get_dist(src, L)
 			spotlights+=L
 			continue
 		if((t.x+1 == cen.x && t.y-1 == cen.y) || (t.x+2==cen.x && t.y-2 == cen.y))
-			var/obj/item/device/flashlight/spotlight/L = new /obj/item/device/flashlight/spotlight(t)
+			var/obj/item/flashlight/spotlight/L = new /obj/item/flashlight/spotlight(t)
 			L.light_color = "nw"
 			L.light_power = 30 - (get_dist(src, L) * 8)
 			L.range = 1.4+get_dist(src, L)
@@ -241,7 +237,7 @@
 
 /obj/machinery/disco/proc/lights_spin()
 	for(var/i in 1 to 25)
-		if(qdeleted(src) || !active)
+		if(QDELETED(src) || !active)
 			return
 		var/obj/effect/overlay/sparkles/S = new /obj/effect/overlay/sparkles(src)
 		S.alpha = 0
@@ -265,8 +261,8 @@
 	for(var/obj/reveal in sparkles)
 		reveal.alpha = 255
 	while(active)
-		for(var/obj/item/device/flashlight/spotlight/glow in spotlights) // The multiples reflects custom adjustments to each colors after dozens of tests
-			if(qdeleted(src) || !active || qdeleted(glow))
+		for(var/obj/item/flashlight/spotlight/glow in spotlights) // The multiples reflects custom adjustments to each colors after dozens of tests
+			if(QDELETED(src) || !active || QDELETED(glow))
 				return
 			if(glow.light_color == "red")
 				glow.light_color = "nw"
@@ -315,19 +311,28 @@
 				glow.update_light()
 				continue
 		if(prob(2))  // Unique effects for the dance floor that show up randomly to mix things up
-			INVOKE_ASYNC(src, .proc/hierofunk)
+			INVOKE_ASYNC(src, PROC_REF(hierofunk))
 		sleep(selection.song_beat)
 
 
 /obj/machinery/disco/proc/dance(mob/living/M) //Show your moves
 	set waitfor = FALSE
+	if(M.client)
+		if(!(M.client.prefs.sound & SOUND_DISCO)) //they dont want music or dancing
+			rangers -= M //Doing that here as it'll be checked less often than in processing.
+			return
+		if(!(M.client.prefs.toggles2 & PREFTOGGLE_2_DANCE_DISCO)) //they just dont wanna dance
+			return
 	switch(rand(0,9))
 		if(0 to 1)
 			dance2(M)
 		if(2 to 3)
 			dance3(M)
 		if(4 to 6)
-			dance4(M)
+			if(restdancing)
+				dance4(M)
+			else
+				dance2(M)
 		if(7 to 9)
 			dance5(M)
 
@@ -395,10 +400,12 @@
 	while(time)
 		sleep(speed)
 		for(var/i in 1 to speed)
-			M.setDir(pick(cardinal))
-			M.resting = !M.resting
-			M.update_canmove()
-		 time--
+			M.setDir(pick(GLOB.cardinal))
+			if(IS_HORIZONTAL(M))
+				M.stand_up()
+			else
+				M.lay_down()
+		time--
 
 /obj/machinery/disco/proc/dance5(mob/living/M)
 	animate(M, transform = matrix(180, MATRIX_ROTATE), time = 1, loop = 0)
@@ -442,8 +449,8 @@
 	lying_prev = 0
 
 /obj/machinery/disco/proc/dance_over()
-	QDEL_LIST(spotlights)
-	QDEL_LIST(sparkles)
+	QDEL_LIST_CONTENTS(spotlights)
+	QDEL_LIST_CONTENTS(sparkles)
 	for(var/mob/living/L in rangers)
 		if(!L || !L.client)
 			continue
@@ -459,21 +466,42 @@
 		var/sound/song_played = sound(selection.song_path)
 
 		for(var/mob/M in range(10,src))
-			if(!(M in rangers))
-				rangers[M] = TRUE
-				M.playsound_local(get_turf(M), null, 100, channel = CHANNEL_JUKEBOX, S = song_played)
-			if(prob(5+(allowed(M) * 4)) && M.canmove)
-				dance(M)
-		for(var/mob/L in rangers)
+			if(!M.client || M.client.prefs.sound & SOUND_DISCO)
+				if(!(M in rangers))
+					rangers[M] = TRUE
+					M.playsound_local(get_turf(M), null, 100, channel = CHANNEL_JUKEBOX, S = song_played, use_reverb = FALSE)
+		for(var/mob/living/L in rangers)
 			if(get_dist(src, L) > 10)
 				rangers -= L
 				if(!L || !L.client)
 					continue
 				L.stop_sound_channel(CHANNEL_JUKEBOX)
+			else if(prob(9) && (L.mobility_flags & MOBILITY_STAND) && isliving(L))
+				dance(L)
 	else if(active)
 		active = FALSE
-		processing_objects.Remove(src)
+		STOP_PROCESSING(SSobj, src)
 		dance_over()
 		playsound(src,'sound/machines/terminal_off.ogg',50,1)
-		icon_state = "disco0"
-		stop = world.time + 100
+		update_icon()
+		set_light(0)
+		stop = world.time + 50
+
+
+
+/obj/machinery/disco/immobile
+	name = "radiant dance machine mark V"
+	desc = "A massive disco ball permanently anchored to the floor with heat-sealed bolts. Merely being in the presence of such a majestic contraption fills you with the urge to dance."
+	anchored = TRUE
+
+/obj/machinery/disco/immobile/wrench_act()
+	return FALSE
+
+/obj/machinery/disco/chaos_staff
+	restdancing = FALSE
+	anchored = TRUE
+
+/obj/machinery/disco/chaos_staff/Initialize(mapload)
+	. = ..()
+	selection = pick(songs)
+	INVOKE_ASYNC(src, PROC_REF(breakitdown))

@@ -1,3 +1,5 @@
+/// We really would rather not have admins altering this, this is the cooldown for the preview/shuttle spawning on the shuttle manipulator
+#define PREVIEW_OR_SHUTTLE_SPAWN_COOLDOWN 2 SECONDS
 
 /obj/machinery/shuttle_manipulator
 	name = "shuttle manipulator"
@@ -9,10 +11,9 @@
 
 	icon = 'icons/obj/machines/shuttle_manipulator.dmi'
 	icon_state = "holograph_on"
-
-	var/selected_menu_key = "stat"
-	var/busy
-	// UI state variables
+	/// Used for cooldown, very obvious name, required due to shuttles spawning in the same location and causing the server to implode
+	var/shuttle_and_preview_cooldown = 0
+	/// UI state variables
 	var/datum/map_template/shuttle/selected
 
 	var/obj/docking_port/mobile/existing_shuttle
@@ -21,19 +22,21 @@
 	var/datum/map_template/shuttle/preview_template
 	var/list/templates = list()
 	var/list/shuttle_data = list()
+	anchored = TRUE
+	layer = 5
 
-/obj/machinery/shuttle_manipulator/New()
+/obj/machinery/shuttle_manipulator/Initialize(mapload)
 	. = ..()
-	update_icon()
+	update_icon(UPDATE_OVERLAYS)
 
-/obj/machinery/shuttle_manipulator/update_icon()
-	overlays.Cut()
+/obj/machinery/shuttle_manipulator/update_overlays()
+	. = ..()
 	var/image/hologram_projection = image(icon, "hologram_on")
 	hologram_projection.pixel_y = 22
 	var/image/hologram_ship = image(icon, "hologram_whiteship")
 	hologram_ship.pixel_y = 27
-	overlays += hologram_projection
-	overlays += hologram_ship
+	. += hologram_projection
+	. += hologram_ship
 
 /obj/machinery/shuttle_manipulator/attack_ghost(user as mob)
 	attack_hand(user)
@@ -53,41 +56,43 @@
 		if(SHUTTLE_ESCAPE)
 			. = "escape"
 	if(!.)
-		throw EXCEPTION("shuttlemode2str(): invalid mode")
+		. = "ERROR"
 
 /obj/machinery/shuttle_manipulator/attack_hand(mob/user)
 	ui_interact(user)
 
-/obj/machinery/shuttle_manipulator/ui_interact(mob/user, ui_key = "main", var/datum/nanoui/ui = null, var/force_open = 1)
-	// update the ui if it exists, returns null if no ui is passed/found
-	ui = nanomanager.try_update_ui(user, src, ui_key, ui, force_open)
-	if(!ui)
-		// the ui does not exist, so we'll create a new() one
-        // for a list of parameters and their descriptions see the code docs in \code\modules\nano\nanoui.dm
-		ui = new(user, src, ui_key, "shuttle_manipulator.tmpl", "Shuttle Manipulator", 660, 700, null, null, admin_state)
-		// when the ui is first opened this is the data it will use
-		// open the new ui window
-		ui.open()
-		// auto update every Master Controller tick
-		ui.set_auto_update(1)
+/obj/machinery/shuttle_manipulator/vv_edit_var(var_name, var_value)
+	switch(var_name)
+		if("shuttle_and_preview_cooldown")
+			log_and_message_admins("has attempted to change the [var_name] variable. Please do not do this, this can cause entire Z levels to freeze if spammed too quickly.")
+			return FALSE // Extremely important that this doesn't get varedited by mistake, otherwise horrible, horrible things can happen to the server.
+	return ..()
 
-/obj/machinery/shuttle_manipulator/ui_data(mob/user, datum/topic_state/state)
-	var/data[0]
-	data["selectedMenuKey"] = selected_menu_key
+/obj/machinery/shuttle_manipulator/ui_state(mob/user)
+	return GLOB.admin_state
+
+/obj/machinery/shuttle_manipulator/ui_interact(mob/user, datum/tgui/ui = null)
+	ui = SStgui.try_update_ui(user, src, ui)
+	if(!ui)
+		ui = new(user, src, "ShuttleManipulator", name)
+		ui.open()
+
+/obj/machinery/shuttle_manipulator/ui_data(mob/user)
+	var/list/data = list()
 
 	data["templates"] = list()
 	var/list/templates = data["templates"]
 	data["templates_tabs"] = list()
 	data["selected"] = null
 
-	for(var/shuttle_id in shuttle_templates)
-		var/datum/map_template/shuttle/S = shuttle_templates[shuttle_id]
+	for(var/shuttle_id in GLOB.shuttle_templates)
+		var/datum/map_template/shuttle/S = GLOB.shuttle_templates[shuttle_id]
 
 		if(!templates[S.port_id])
 			data["templates_tabs"] += S.port_id
 			// The first found shuttle type will be our default
 			if(!existing_shuttle)
-				existing_shuttle = shuttle_master.getShuttle(S.port_id)
+				existing_shuttle = SSshuttle.getShuttle(S.port_id)
 			templates[S.port_id] = list(
 				"port_id" = S.port_id,
 				"templates" = list()
@@ -111,8 +116,10 @@
 
 	// Status panel
 	data["shuttles"] = list()
-	for(var/i in shuttle_master.mobile)
+	for(var/i in SSshuttle.mobile_docking_ports)
 		var/obj/docking_port/mobile/M = i
+		if(!M)
+			continue
 		var/list/L = list()
 		L["name"] = M.name
 		L["id"] = M.id
@@ -130,87 +137,71 @@
 		data["shuttles"] += list(L)
 	return data
 
-/obj/machinery/shuttle_manipulator/Topic(href, href_list)
+/obj/machinery/shuttle_manipulator/ui_act(action, list/params, datum/tgui/ui)
 	if(..())
 		return
+	if(shuttle_and_preview_cooldown > world.time)
+		to_chat(usr, SPAN_WARNING("Please wait until the desired shuttle has finished being loaded."))
+		return
+	. = TRUE
 
-	var/mob/user = usr
+	switch(action)
+		if("select_template_category")
+			var/chosen_shuttle_id = params["cat"]
+			selected = null
+			existing_shuttle = SSshuttle.getShuttle(chosen_shuttle_id)
 
-	// Preload some common parameters
-	var/shuttle_id = href_list["shuttle_id"]
-	var/datum/map_template/shuttle/S = shuttle_templates[shuttle_id]
+		if("select_template")
+			var/datum/map_template/shuttle/S = GLOB.shuttle_templates[params["shuttle_id"]]
+			if(S)
+				existing_shuttle = SSshuttle.getShuttle(S.port_id)
+				selected = S
 
+		if("jump_to")
+			if(params["type"] == "mobile")
+				for(var/i in SSshuttle.mobile_docking_ports)
+					var/obj/docking_port/mobile/M = i
+					if(M.id == params["id"])
+						usr.forceMove(get_turf(M))
+						break
 
-	if(href_list["selectMenuKey"])
-		selected_menu_key = href_list["selectMenuKey"]
-		return 1 // return 1 forces an update to all Nano uis attached to src
-
-	if(href_list["select_template_category"])
-		var/chosen_shuttle_id = href_list["select_template_category"]
-		selected = null
-		existing_shuttle = shuttle_master.getShuttle(chosen_shuttle_id)
-		return 1
-
-	if(href_list["select_template"])
-		if(S)
-			existing_shuttle = shuttle_master.getShuttle(S.port_id)
-			selected = S
-			. = TRUE
-
-	if(href_list["jump_to"])
-
-		if(href_list["type"] == "mobile")
-			for(var/i in shuttle_master.mobile)
+		if("fast_travel")
+			for(var/i in SSshuttle.mobile_docking_ports)
 				var/obj/docking_port/mobile/M = i
-				if(M.id == href_list["id"])
-					user.forceMove(get_turf(M))
-					. = TRUE
+				if(M.id == params["id"] && M.timer && M.timeLeft() >= 50)
+					M.setTimer(50)
+					message_admins("[key_name_admin(usr)] fast travelled [M]")
+					log_admin("[key_name(usr)] fast travelled [M]")
 					break
 
+		if("preview")
+			shuttle_and_preview_cooldown = world.time + PREVIEW_OR_SHUTTLE_SPAWN_COOLDOWN
+			var/datum/map_template/shuttle/S = GLOB.shuttle_templates[params["shuttle_id"]]
+			if(S)
+				unload_preview()
+				preview_shuttle = SSshuttle.load_template(S)
+				if(preview_shuttle)
+					preview_template = S
+					usr.forceMove(get_turf(preview_shuttle))
 
-	if(href_list["fast_travel"])
-
-		for(var/i in shuttle_master.mobile)
-			var/obj/docking_port/mobile/M = i
-			if(M.id == href_list["id"] && M.timer && M.timeLeft() >= 50)
-				M.setTimer(50)
-				. = TRUE
-				message_admins("[key_name_admin(usr)] fast travelled \
-					[M]")
-				log_admin("[key_name(usr)] fast travelled [M]")
-				feedback_add_details("shuttle_fasttravel", M.name)
-				break
-
-
-	if(href_list["preview"])
-		if(S)
-			. = TRUE
-			unload_preview()
-			load_template(S)
-			if(preview_shuttle)
-				preview_template = S
-				user.forceMove(get_turf(preview_shuttle))
-
-	if(href_list["load"])
-		if(existing_shuttle == shuttle_master.backup_shuttle)
-			// TODO make the load button disabled
-			WARNING("The shuttle that the selected shuttle will replace \
-				is the backup shuttle. Backup shuttle is required to be \
-				intact for round sanity.")
-		else if(S)
-			. = TRUE
-			// If successful, returns the mobile docking port
-			var/obj/docking_port/mobile/mdp = action_load(S)
-			if(mdp)
-				user.forceMove(get_turf(mdp))
-				message_admins("[key_name_admin(usr)] loaded [mdp] \
-					with the shuttle manipulator.")
-				log_admin("[key_name(usr)] loaded [mdp] with the \
-					shuttle manipulator.</span>")
-				feedback_add_details("shuttle_manipulator", mdp.name)
-
+		if("load")
+			shuttle_and_preview_cooldown = world.time + PREVIEW_OR_SHUTTLE_SPAWN_COOLDOWN
+			var/datum/map_template/shuttle/S = GLOB.shuttle_templates[params["shuttle_id"]]
+			if(S)
+				// If successful, returns the mobile docking port
+				var/obj/docking_port/mobile/mdp = action_load(S)
+				if(mdp)
+					usr.forceMove(get_turf(mdp))
+					message_admins("[key_name_admin(usr)] loaded [mdp] with the shuttle manipulator.")
+					log_admin("[key_name(usr)] loaded [mdp] with the shuttle manipulator.")
 
 /obj/machinery/shuttle_manipulator/proc/action_load(datum/map_template/shuttle/loading_template)
+	if(isnull(loading_template))
+		CRASH("No template passed.")
+	if(istype(loading_template, /datum/map_template/shuttle/emergency) && SSshuttle.emergency_locked_in)
+		message_admins("The emergency shuttle has been locked in. You can not load another shuttle.")
+		return
+
 	// Check for an existing preview
 	if(preview_shuttle && (loading_template != preview_template))
 		preview_shuttle.jumpToNullSpace()
@@ -218,7 +209,7 @@
 		preview_template = null
 
 	if(!preview_shuttle)
-		load_template(loading_template)
+		preview_shuttle = SSshuttle.load_template(loading_template)
 		preview_template = loading_template
 
 	// get the existing shuttle information, if any
@@ -230,6 +221,8 @@
 		timer = existing_shuttle.timer
 		mode = existing_shuttle.mode
 		D = existing_shuttle.get_docked()
+		if(!D) //lance moment
+			D = SSshuttle.getDock("emergency_away")
 	else
 		D = preview_shuttle.findRoundstartDock()
 
@@ -270,52 +263,9 @@
 
 	return preview_shuttle
 
-/obj/machinery/shuttle_manipulator/proc/load_template(datum/map_template/shuttle/S)
-	// load shuttle template, centred at shuttle import landmark,
-	var/turf/landmark_turf = get_turf(locate("landmark*Shuttle Import"))
-	S.load(landmark_turf, centered = TRUE)
-
-	var/affected = S.get_affected_turfs(landmark_turf, centered=TRUE)
-
-	var/found = 0
-	// Search the turfs for docking ports
-	// - We need to find the mobile docking port because that is the heart of
-	//   the shuttle.
-	// - We need to check that no additional ports have slipped in from the
-	//   template, because that causes unintended behaviour.
-	for(var/T in affected)
-		for(var/obj/docking_port/P in T)
-			if(istype(P, /obj/docking_port/mobile))
-				var/obj/docking_port/mobile/M = P
-				found++
-				if(found > 1)
-					qdel(P, force=TRUE)
-					world.log << "Map warning: Shuttle Template [S.mappath] \
-						has multiple mobile docking ports."
-				else if(!M.timid)
-					// The shuttle template we loaded isn't "timid" which means
-					// it's already registered with the shuttles subsystem.
-					// This is a bad thing.
-					var/m = "Template [S] is non-timid! Unloading."
-					WARNING(m)
-					M.jumpToNullSpace()
-					return
-				else
-					preview_shuttle = P
-			if(istype(P, /obj/docking_port/stationary))
-				world.log << "Map warning: Shuttle Template [S.mappath] has a \
-					stationary docking port."
-	if(!found)
-		var/msg = "load_template(): Shuttle Template [S.mappath] has no \
-			mobile docking port. Aborting import."
-		for(var/T in affected)//wot do?
-			var/turf/T0 = T
-			T0.contents = null
-
-		message_admins(msg)
-		WARNING(msg)
-
 /obj/machinery/shuttle_manipulator/proc/unload_preview()
 	if(preview_shuttle)
 		preview_shuttle.jumpToNullSpace()
 	preview_shuttle = null
+
+#undef PREVIEW_OR_SHUTTLE_SPAWN_COOLDOWN

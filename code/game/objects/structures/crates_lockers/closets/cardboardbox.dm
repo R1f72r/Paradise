@@ -3,26 +3,38 @@
 	desc = "Just a box..."
 	icon = 'icons/obj/cardboard_boxes.dmi'
 	icon_state = "cardboard"
-	icon_opened = "cardboard_open"
-	icon_closed = "cardboard"
-	health = 10
-	burn_state = FLAMMABLE
-	burntime = 20
-	sound = 'sound/effects/rustle2.ogg'
+	enable_door_overlay = FALSE
+	door_anim_time = 0
+	resistance_flags = FLAMMABLE
+	max_integrity = 70
+	integrity_failure = 0
+	open_sound = 'sound/machines/cardboard_box.ogg'
+	close_sound = 'sound/machines/cardboard_box.ogg'
+	close_sound_volume = 35
 	material_drop = /obj/item/stack/sheet/cardboard
-	cutting_sound = 'sound/items/poster_ripped.ogg'
-	var/move_delay = 0
+	/// How fast a mob can move inside this box.
+	var/move_speed_multiplier = 1
+	var/amt = 4
+	var/move_delay = FALSE
 	var/egged = 0
 
-/obj/structure/closet/cardboard/relaymove(mob/user, direction)
-	if(opened || move_delay || user.stat || user.stunned || user.weakened || user.paralysis || !isturf(loc) || !has_gravity(loc))
+/obj/structure/closet/cardboard/relaymove(mob/living/user, direction)
+	if(!istype(user) || opened || move_delay || user.incapacitated() || !isturf(loc) || !has_gravity(loc))
 		return
-	move_delay = 1
-	if(step(src, direction))
-		spawn(config.walk_speed)
-			move_delay = 0
+	move_delay = TRUE
+	var/oldloc = loc
+	step(src, direction)
+	// By default, while inside a box, we move at walk speed times the speed multipler of the box.
+	var/delay = GLOB.configuration.movement.base_walk_speed * move_speed_multiplier
+	if(IS_DIR_DIAGONAL(direction))
+		delay *= SQRT_2 // Moving diagonal counts as moving 2 tiles, we need to slow them down accordingly.
+	if(oldloc != loc)
+		addtimer(CALLBACK(src, PROC_REF(ResetMoveDelay)), delay)
 	else
-		move_delay = 0
+		move_delay = FALSE
+
+/obj/structure/closet/cardboard/proc/ResetMoveDelay()
+	move_delay = FALSE
 
 /obj/structure/closet/cardboard/open()
 	if(opened || !can_open())
@@ -39,8 +51,8 @@
 					if(!L.stat)
 						L.do_alert_animation(L)
 						egged = 1
-				alerted << sound('sound/machines/chime.ogg')
-	..()
+				SEND_SOUND(alerted, sound('sound/machines/chime.ogg'))
+	return ..()
 
 /mob/living/proc/do_alert_animation(atom/A)
 	var/image/I
@@ -53,36 +65,37 @@
 	I.alpha = 0
 	animate(I, pixel_z = 32, alpha = 255, time = 5, easing = ELASTIC_EASING)
 
+/obj/structure/closet/cardboard/welder_act()
+	return
 
-/obj/structure/closet/cardboard/attackby(obj/item/weapon/W as obj, mob/user as mob, params)
+/obj/structure/closet/cardboard/item_interaction(mob/living/user, obj/item/W, list/modifiers)
 	if(src.opened)
-		if(istype(W, /obj/item/weapon/weldingtool))
-			return
-		if(istype(W, /obj/item/weapon/wirecutters))
-			var/obj/item/weapon/wirecutters/WC = W
-			new /obj/item/stack/sheet/cardboard(src.loc)
+		if(istype(W, /obj/item/wirecutters))
+			var/obj/item/wirecutters/WC = W
+			new /obj/item/stack/sheet/cardboard(src.loc, amt)
 			for(var/mob/M in viewers(src))
-				M.show_message("<span class='notice'>\The [src] has been cut apart by [user] with \the [WC].</span>", 3, "You hear cutting.", 2)
+				M.show_message(SPAN_NOTICE("\The [src] has been cut apart by [user] with \the [WC]."), 3, "You hear cutting.", 2)
 			qdel(src)
-			return
-		if(istype(W, /obj/item/weapon/pen))
-			var/decalselection = input("Please select a decal") as null|anything in list("Atmospherics", "Bartender", "Barber", "Blueshield",	"Brig Physician", "Captain",
-			"Cargo", "Chief Engineer",	"Chaplain",	"Chef", "Chemist", "Civilian", "Clown", "CMO", "Coroner", "Detective", "Engineering", "Genetics", "HOP",
-			"HOS", "Hydroponics", "Internal Affairs Agent", "Janitor",	"Magistrate", "Mechanic", "Medical", "Mime", "Mining", "NT Representative", "Paramedic", "Pod Pilot",
-			"Prisoner",	"Research Director", "Security", "Syndicate", "Therapist", "Virology", "Warden", "Xenobiology")
+			return ITEM_INTERACT_COMPLETE
+		if(is_pen(W))
+			var/decalselection = tgui_input_list(user, "Please select a decal", "Paint Box", list("Atmospherics", "Bartender", "Barber", "Blueshield", "Captain",
+			"Cargo", "Chief Engineer",	"Chaplain",	"Chef", "Chemist", "Assistant", "Clown", "CMO", "Coroner", "Detective", "Engineering", "Genetics", "HOP",
+			"HOS", "Hydroponics", "Internal Affairs Agent", "Janitor",	"Magistrate", "Medical", "Mime", "Mining", "NT Representative", "Paramedic",
+			"Prisoner",	"Research Director", "Security", "Syndicate", "Therapist", "Virology", "Warden", "Xenobiology"))
 			if(!decalselection)
-				return
+				return ITEM_INTERACT_COMPLETE
 			if(user.incapacitated())
 				to_chat(user, "You're in no condition to perform this action.")
-				return
+				return ITEM_INTERACT_COMPLETE
 			if(W != user.get_active_hand())
 				to_chat(user, "You must be holding the pen to perform this action.")
-				return
-			if(! Adjacent(user))
+				return ITEM_INTERACT_COMPLETE
+			if(!Adjacent(user))
 				to_chat(user, "You have moved too far away from the cardboard box.")
-				return
+				return ITEM_INTERACT_COMPLETE
 			decalselection = replacetext(decalselection, " ", "_")
 			decalselection = lowertext(decalselection)
-			icon_opened = ("cardboard_open_"+decalselection)
-			icon_closed = ("cardboard_"+decalselection)
+			custom_skin = "_[decalselection]"
 			update_icon() // a proc declared in the closets parent file used to update opened/closed sprites on normal closets
+
+		return ITEM_INTERACT_COMPLETE

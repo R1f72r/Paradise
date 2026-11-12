@@ -1,69 +1,45 @@
 //Preferences stuff
 	//Head accessory styles
-var/global/list/head_accessory_styles_list = list() //stores /datum/sprite_accessory/head_accessory indexed by name
+GLOBAL_LIST_EMPTY(head_accessory_styles_list) //stores /datum/sprite_accessory/head_accessory indexed by name
 	//Marking styles
-var/global/list/marking_styles_list = list() //stores /datum/sprite_accessory/body_markings indexed by name
+GLOBAL_LIST_EMPTY(marking_styles_list) //stores /datum/sprite_accessory/body_markings indexed by name
 	//Hairstyles
-var/global/list/hair_styles_public_list = list()			//stores /datum/sprite_accessory/hair indexed by name
-var/global/list/hair_styles_male_list = list()
-var/global/list/hair_styles_female_list = list()
-var/global/list/hair_styles_full_list = list() //fluff hair styles
-var/global/list/facial_hair_styles_list = list()	//stores /datum/sprite_accessory/facial_hair indexed by name
-var/global/list/facial_hair_styles_male_list = list()
-var/global/list/facial_hair_styles_female_list = list()
-var/global/list/skin_styles_female_list = list()		//unused
+GLOBAL_LIST_EMPTY(hair_styles_public_list)			//stores /datum/sprite_accessory/hair indexed by name
+GLOBAL_LIST_EMPTY(hair_styles_male_list)
+GLOBAL_LIST_EMPTY(hair_styles_female_list)
+GLOBAL_LIST_EMPTY(hair_styles_full_list) //fluff hair styles
+GLOBAL_LIST_EMPTY(facial_hair_styles_list)	//stores /datum/sprite_accessory/facial_hair indexed by name
+GLOBAL_LIST_EMPTY(facial_hair_styles_male_list)
+GLOBAL_LIST_EMPTY(facial_hair_styles_female_list)
+GLOBAL_LIST_EMPTY(hair_gradients_list) //stores /datum/sprite_accessory/hair_gradient indexed by name
 	//Underwear
-var/global/list/underwear_list = list()		//stores /datum/sprite_accessory/underwear indexed by name
-var/global/list/underwear_m = list()	//stores only underwear name
-var/global/list/underwear_f = list()	//stores only underwear name
+GLOBAL_LIST_EMPTY(underwear_list)		//stores /datum/sprite_accessory/underwear indexed by name
+GLOBAL_LIST_EMPTY(underwear_m)	//stores only underwear name
+GLOBAL_LIST_EMPTY(underwear_f)	//stores only underwear name
 	//Undershirts
-var/global/list/undershirt_list = list() 	//stores /datum/sprite_accessory/undershirt indexed by name
-var/global/list/undershirt_m = list()	 //stores only undershirt name
-var/global/list/undershirt_f = list()	 //stores only undershirt name
+GLOBAL_LIST_EMPTY(undershirt_list) 	//stores /datum/sprite_accessory/undershirt indexed by name
+GLOBAL_LIST_EMPTY(undershirt_m)	 //stores only undershirt name
+GLOBAL_LIST_EMPTY(undershirt_f)	 //stores only undershirt name
+GLOBAL_LIST_EMPTY(undershirt_full_list)
 	//Socks
-var/global/list/socks_list = list()		//stores /datum/sprite_accessory/socks indexed by name
-var/global/list/socks_m = list()	 //stores only socks name
-var/global/list/socks_f = list()	 //stores only socks name
+GLOBAL_LIST_EMPTY(socks_list)		//stores /datum/sprite_accessory/socks indexed by name
+GLOBAL_LIST_EMPTY(socks_m)	 //stores only socks name
+GLOBAL_LIST_EMPTY(socks_f)	 //stores only socks name
 	//Alt Heads
-var/global/list/alt_heads_list = list()	//stores /datum/sprite_accessory/alt_heads indexed by name
+GLOBAL_LIST_EMPTY(alt_heads_list)	//stores /datum/sprite_accessory/alt_heads indexed by name
 
-var/static/list/scarySounds = list('sound/weapons/thudswoosh.ogg','sound/weapons/Taser.ogg','sound/weapons/armbomb.ogg','sound/voice/hiss1.ogg','sound/voice/hiss2.ogg', \
-'sound/voice/hiss3.ogg','sound/voice/hiss4.ogg','sound/voice/hiss5.ogg','sound/voice/hiss6.ogg','sound/effects/Glassbr1.ogg','sound/effects/Glassbr2.ogg','sound/effects/Glassbr3.ogg', \
-'sound/items/Welder.ogg','sound/items/Welder2.ogg','sound/machines/airlock_open.ogg','sound/effects/clownstep1.ogg','sound/effects/clownstep2.ogg')
-
-// Reference list for disposal sort junctions. Set the sortType variable on disposal sort junctions to
-// the index of the sort department that you want. For example, sortType set to 2 will reroute all packages
-// tagged for the Cargo Bay.
-
-//If you don't want to fuck up disposals, add to this list, and don't change the order.
-//If you insist on changing the order, you'll have to change every sort junction to reflect the new order. --Pete
-
-var/list/TAGGERLOCATIONS = list("Disposals",
-	"Cargo Bay", "QM Office", "Engineering", "CE Office",
-	"Atmospherics", "HoS Office", "Security", "Medbay",
-	"CMO Office", "Chemistry", "Research", "RD Office",
-	"Robotics", "HoP Office", "Library", "Chapel", "Captain's Office",
-	"Bar", "Kitchen", "Hydroponics", "Janitor Closet","Genetics","Brig Physician")
-
-var/list/hit_appends = list("-OOF", "-ACK", "-UGH", "-HRNK", "-HURGH", "-GLORF")
-
-var/global/list/greek_letters = list("Alpha", "Beta", "Gamma", "Delta",
+GLOBAL_LIST_INIT(greek_letters, list("Alpha", "Beta", "Gamma", "Delta",
 	"Epsilon", "Zeta", "Eta", "Theta", "Iota", "Kappa", "Lambda", "Mu",
 	"Nu", "Xi", "Omicron", "Pi", "Rho", "Sigma", "Tau", "Upsilon", "Phi",
-	"Chi", "Psi", "Omega")
+	"Chi", "Psi", "Omega"))
 
-var/global/list/phonetic_alphabet = list("Alpha", "Bravo", "Charlie",
+GLOBAL_LIST_INIT(phonetic_alphabet, list("Alpha", "Bravo", "Charlie",
 	"Delta", "Echo", "Foxtrot", "Golf", "Hotel", "India", "Juliet",
 	"Kilo", "Lima", "Mike", "November", "Oscar", "Papa", "Quebec",
 	"Romeo", "Sierra", "Tango", "Uniform", "Victor", "Whiskey", "X-ray",
-	"Yankee", "Zulu")
+	"Yankee", "Zulu"))
 
-var/global/list/numbers_as_words = list("One", "Two", "Three", "Four",
-	"Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve",
-	"Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen",
-	"Eighteen", "Nineteen")
-
-	//Backpacks
+//Backpacks
 #define GBACKPACK "Grey Backpack"
 #define GSATCHEL "Grey Satchel"
 #define GDUFFLEBAG "Grey Dufflebag"
@@ -71,4 +47,41 @@ var/global/list/numbers_as_words = list("One", "Two", "Three", "Four",
 #define DBACKPACK "Department Backpack"
 #define DSATCHEL "Department Satchel"
 #define DDUFFLEBAG "Department Dufflebag"
-var/global/list/backbaglist = list(DBACKPACK, DSATCHEL, DDUFFLEBAG, GBACKPACK, GSATCHEL, GDUFFLEBAG, LSATCHEL)
+GLOBAL_LIST_INIT(backbaglist, list(DBACKPACK, DSATCHEL, DDUFFLEBAG, GBACKPACK, GSATCHEL, GDUFFLEBAG, LSATCHEL))
+
+//Chooseable brain types for borgs
+#define MMI_BORG "MMI"
+#define ROBOBRAIN_BORG "Robobrain"
+#define POSITRONIC_BORG "Positronic"
+GLOBAL_LIST_INIT(borg_brain_choices, list(MMI_BORG, ROBOBRAIN_BORG, POSITRONIC_BORG))
+GLOBAL_PROTECT(borg_brain_choices)
+
+//Chooseable ringtones
+//Due to database reasons, the name should be 16 characters long maximum
+GLOBAL_LIST_INIT(pda_ringtone_choices, list("beep" = 'sound/machines/twobeep.ogg',
+								"boop" = 'sound/machines/boop.ogg',
+								"blup" = 'sound/misc/blup.ogg',
+								"chime" = 'sound/machines/notif2.ogg',
+								"slip" = 'sound/misc/slip.ogg',
+								"honk" = 'sound/items/bikehorn.ogg',
+								"SKREE" = 'sound/voice/shriek1.ogg',
+								"holy" = 'sound/items/PDA/ambicha4-short.ogg',
+								"boom" = 'sound/effects/explosionfar.ogg',
+								"gavel" = 'sound/items/gavel.ogg',
+								"xeno" = 'sound/voice/hiss1.ogg',
+								"smoke" = 'sound/magic/smoke.ogg',
+								"shatter" = 'sound/effects/pylon_shatter.ogg',
+								"energy" = 'sound/weapons/egloves.ogg',
+								"flare" = 'sound/goonstation/misc/matchstick_light.ogg',
+								"interference" = 'sound/misc/interference.ogg',
+								"zap" = 'sound/effects/eleczap.ogg',
+								"disgusting" = 'sound/effects/blobattack.ogg',
+								"hungry" = 'sound/weapons/bite.ogg'))
+
+
+// Code for bloopers
+
+GLOBAL_LIST_EMPTY(blooper_list)
+GLOBAL_LIST_EMPTY(blooper_random_list)
+GLOBAL_LIST_EMPTY(blooper_whitelist)
+GLOBAL_VAR_INIT(blooper_allowed, TRUE) // For administrators

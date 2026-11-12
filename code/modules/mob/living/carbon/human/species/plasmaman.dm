@@ -1,24 +1,31 @@
-/datum/species/plasmaman // /vg/
+/datum/species/plasmaman
 	name = "Plasmaman"
 	name_plural = "Plasmamen"
+	max_age = 150
 	icobase = 'icons/mob/human_races/r_plasmaman_sb.dmi'
-	deform = 'icons/mob/human_races/r_plasmaman_pb.dmi'  // TODO: Need deform.
+	dangerous_existence = TRUE //So so much
 	//language = "Clatter"
-	unarmed_type = /datum/unarmed_attack/punch
 
-	species_traits = list(IS_WHITELISTED, NO_BLOOD, NOTRANSSTING)
+	blurb = "Plasmamen are the remnants of a species that was either exiled to, or crashed upon, the plasma-rich world of Boron. \
+	Believed to have initially served as indentured labourers, Plasmamen are the result of chronic plasma exposure throughout several hundred generations.<br/><br/> \
+	Their leaders must ritually self-immolate and are only allowed to hold office for as long as they remain on fire."
+
+	species_traits = list(NO_BLOOD, NO_HAIR)
+	inherent_traits = list(TRAIT_RADIMMUNE, TRAIT_NOHUNGER, TRAIT_BURN_WOUND_IMMUNE)
+	inherent_biotypes = MOB_HUMANOID | MOB_MINERAL
+	forced_heartattack = TRUE // Plasmamen have no blood, but they should still get heart-attacks
 	dietflags = DIET_OMNI
+	bodyflags = BALD | SHAVED
 	reagent_tag = PROCESS_ORG
 
-	//default_mutations=list(SKELETON) // This screws things up
+	taste_sensitivity = TASTE_SENSITIVITY_NO_TASTE //skeletons can't taste anything
 
 	butt_sprite = "plasma"
 
 	breathid = "tox"
 
-	heat_level_1 = 350  // Heat damage level 1 above this point.
-	heat_level_2 = 400  // Heat damage level 2 above this point.
-	heat_level_3 = 500  // Heat damage level 3 above this point.
+	burn_mod = 1.5
+	heatmod = 1.5
 
 	//Has default darksight of 2.
 
@@ -28,157 +35,190 @@
 		"realizes the existential problem of being made out of plasma!",
 		"shows their true colors, which happens to be the color of plasma!")
 
+	skinned_type = /obj/item/stack/sheet/mineral/plasma // We're low on plasma, R&D! *eyes plasmaman co-worker intently*
+	meat_type = /obj/item/food/meat/human
 	has_organ = list(
-		"heart" =    /obj/item/organ/internal/heart,
+		"heart" =    /obj/item/organ/internal/heart/plasmaman,
 		"lungs" =    /obj/item/organ/internal/lungs/plasmaman,
-		"liver" =    /obj/item/organ/internal/liver,
-		"kidneys" =  /obj/item/organ/internal/kidneys,
-		"brain" =    /obj/item/organ/internal/brain,
-		"appendix" = /obj/item/organ/internal/appendix,
-		"eyes" =     /obj/item/organ/internal/eyes
+		"liver" =    /obj/item/organ/internal/liver/plasmaman,
+		"kidneys" =  /obj/item/organ/internal/kidneys/plasmaman,
+		"brain" =    /obj/item/organ/internal/brain/plasmaman,
+		"eyes" =     /obj/item/organ/internal/eyes/plasmaman
 		)
 
-/datum/species/plasmaman/say_filter(mob/M, message, datum/language/speaking)
-	if(copytext(message, 1, 2) != "*")
-		message = replacetext(message, "s", stutter("ss"))
-	return message
+	speciesbox = /obj/item/storage/box/survival_plasmaman
+	flesh_color = "#8b3fba"
+	autohiss_basic_map = list(
+			"s" = list("ss", "sss", "ssss")
+		)
 
-/datum/species/plasmaman/after_equip_job(datum/job/J, mob/living/carbon/human/H)
-	var/assigned_role = H.mind && H.mind.assigned_role ? H.mind.assigned_role : "Civilian"
-	// Unequip existing suits and hats.
-	H.unEquip(H.wear_suit)
-	H.unEquip(H.head)
-	if(assigned_role != "Clown")
-		H.unEquip(H.wear_mask)
+	plushie_type = /obj/item/toy/plushie/plasmamanplushie
 
-	H.equip_or_collect(new /obj/item/clothing/mask/breath(H), slot_wear_mask)
-	var/suit=/obj/item/clothing/suit/space/eva/plasmaman/assistant
-	var/helm=/obj/item/clothing/head/helmet/space/eva/plasmaman/assistant
-	var/tank_slot = slot_s_store
-	var/tank_slot_name = "suit storage"
-
-	switch(assigned_role)
-		if("Scientist","Roboticist")
-			suit=/obj/item/clothing/suit/space/eva/plasmaman/science
-			helm=/obj/item/clothing/head/helmet/space/eva/plasmaman/science
-		if("Geneticist")
-			suit=/obj/item/clothing/suit/space/eva/plasmaman/science/geneticist
-			helm=/obj/item/clothing/head/helmet/space/eva/plasmaman/science/geneticist
-		if("Research Director")
-			suit=/obj/item/clothing/suit/space/eva/plasmaman/science/rd
-			helm=/obj/item/clothing/head/helmet/space/eva/plasmaman/science/rd
-		if("Station Engineer", "Mechanic")
-			suit=/obj/item/clothing/suit/space/eva/plasmaman/engineer
-			helm=/obj/item/clothing/head/helmet/space/eva/plasmaman/engineer
-		if("Chief Engineer")
-			suit=/obj/item/clothing/suit/space/eva/plasmaman/engineer/ce
-			helm=/obj/item/clothing/head/helmet/space/eva/plasmaman/engineer/ce
-		if("Life Support Specialist")
-			suit=/obj/item/clothing/suit/space/eva/plasmaman/atmostech
-			helm=/obj/item/clothing/head/helmet/space/eva/plasmaman/atmostech
-		if("Detective")
-			suit=/obj/item/clothing/suit/space/eva/plasmaman/security
-			helm=/obj/item/clothing/head/helmet/space/eva/plasmaman/security
-		if("Warden","Security Officer","Security Pod Pilot")
-			suit=/obj/item/clothing/suit/space/eva/plasmaman/security
-			helm=/obj/item/clothing/head/helmet/space/eva/plasmaman/security
-			H.equip_or_collect(new /obj/item/weapon/gun/energy/gun/advtaser(H), slot_in_backpack)
-		if("Internal Affairs Agent")
-			suit=/obj/item/clothing/suit/space/eva/plasmaman/lawyer
-			helm=/obj/item/clothing/head/helmet/space/eva/plasmaman/lawyer
-		if("Magistrate")
-			suit=/obj/item/clothing/suit/space/eva/plasmaman/magistrate
-			helm=/obj/item/clothing/head/helmet/space/eva/plasmaman/magistrate
-		if("Head of Security")
-			suit=/obj/item/clothing/suit/space/eva/plasmaman/security/hos
-			helm=/obj/item/clothing/head/helmet/space/eva/plasmaman/security/hos
-			H.equip_or_collect(new /obj/item/weapon/gun/energy/gun(H), slot_in_backpack)
-		if("Captain", "Blueshield")
-			suit=/obj/item/clothing/suit/space/eva/plasmaman/security/captain
-			helm=/obj/item/clothing/head/helmet/space/eva/plasmaman/security/captain
-		if("Head of Personnel")
-			suit=/obj/item/clothing/suit/space/eva/plasmaman/security/hop
-			helm=/obj/item/clothing/head/helmet/space/eva/plasmaman/security/hop
-		if("Nanotrasen Representative")
-			suit = /obj/item/clothing/suit/space/eva/plasmaman/nt_rep
-			helm = /obj/item/clothing/head/helmet/space/eva/plasmaman/nt_rep
-		if("Medical Doctor","Brig Physician","Virologist")
-			suit=/obj/item/clothing/suit/space/eva/plasmaman/medical
-			helm=/obj/item/clothing/head/helmet/space/eva/plasmaman/medical
-			H.equip_or_collect(new /obj/item/device/flashlight/pen(H), slot_in_backpack)
-		if("Paramedic")
-			suit=/obj/item/clothing/suit/space/eva/plasmaman/medical/paramedic
-			helm=/obj/item/clothing/head/helmet/space/eva/plasmaman/medical/paramedic
-		if("Chemist")
-			suit=/obj/item/clothing/suit/space/eva/plasmaman/medical/chemist
-			helm=/obj/item/clothing/head/helmet/space/eva/plasmaman/medical/chemist
-		if("Chief Medical Officer")
-			suit=/obj/item/clothing/suit/space/eva/plasmaman/medical/cmo
-			helm=/obj/item/clothing/head/helmet/space/eva/plasmaman/medical/cmo
-		if("Coroner")
-			suit=/obj/item/clothing/suit/space/eva/plasmaman/medical/coroner
-			helm=/obj/item/clothing/head/helmet/space/eva/plasmaman/medical/coroner
-		if("Virologist")
-			suit=/obj/item/clothing/suit/space/eva/plasmaman/medical/virologist
-			helm=/obj/item/clothing/head/helmet/space/eva/plasmaman/medical/virologist
-		if("Bartender", "Chef")
-			suit=/obj/item/clothing/suit/space/eva/plasmaman/service
-			helm=/obj/item/clothing/head/helmet/space/eva/plasmaman/service
-		if("Cargo Technician", "Quartermaster")
-			suit=/obj/item/clothing/suit/space/eva/plasmaman/cargo
-			helm=/obj/item/clothing/head/helmet/space/eva/plasmaman/cargo
-		if("Shaft Miner")
-			suit=/obj/item/clothing/suit/space/eva/plasmaman/miner
-			helm=/obj/item/clothing/head/helmet/space/eva/plasmaman/miner
-		if("Botanist")
-			suit=/obj/item/clothing/suit/space/eva/plasmaman/botanist
-			helm=/obj/item/clothing/head/helmet/space/eva/plasmaman/botanist
+/datum/species/plasmaman/before_equip_job(datum/job/J, mob/living/carbon/human/H, visualsOnly = FALSE)
+	var/current_job = J.title
+	var/datum/outfit/plasmaman/O = new /datum/outfit/plasmaman
+	switch(current_job)
 		if("Chaplain")
-			suit=/obj/item/clothing/suit/space/eva/plasmaman/chaplain
-			helm=/obj/item/clothing/head/helmet/space/eva/plasmaman/chaplain
+			O = new /datum/outfit/plasmaman/chaplain
+
+		if("Librarian")
+			O = new /datum/outfit/plasmaman/librarian
+
 		if("Janitor")
-			suit=/obj/item/clothing/suit/space/eva/plasmaman/janitor
-			helm=/obj/item/clothing/head/helmet/space/eva/plasmaman/janitor
-		if("Civilian", "Barber")
-			suit=/obj/item/clothing/suit/space/eva/plasmaman/assistant
-			helm=/obj/item/clothing/head/helmet/space/eva/plasmaman/assistant
-		if("Clown")
-			suit=/obj/item/clothing/suit/space/eva/plasmaman/clown
-			helm=/obj/item/clothing/head/helmet/space/eva/plasmaman/clown
+			O = new /datum/outfit/plasmaman/janitor
+
+		if("Botanist")
+			O = new /datum/outfit/plasmaman/botany
+
+		if("Bartender", "Internal Affairs Agent", "Magistrate", "Nanotrasen Representative")
+			O = new /datum/outfit/plasmaman/bar
+
+		if("Chef")
+			O = new /datum/outfit/plasmaman/chef
+
+		if("Security Officer")
+			O = new /datum/outfit/plasmaman/security
+
+		if("Detective")
+			O = new /datum/outfit/plasmaman/detective
+
+		if("Warden")
+			O = new /datum/outfit/plasmaman/warden
+
+		if("Head of Security")
+			O = new /datum/outfit/plasmaman/hos
+
+		if("Cargo Technician", "Quartermaster")
+			O = new /datum/outfit/plasmaman/cargo
+
+		if("Explorer")
+			O = new /datum/outfit/plasmaman/expedition
+
+		if("Shaft Miner")
+			O = new /datum/outfit/plasmaman/mining
+
+		if("Smith")
+			O = new /datum/outfit/plasmaman/smith
+
+		if("Medical Doctor", "Paramedic", "Coroner")
+			O = new /datum/outfit/plasmaman/medical
+
+		if("Chief Medical Officer")
+			O = new /datum/outfit/plasmaman/cmo
+
+		if("Chemist")
+			O = new /datum/outfit/plasmaman/chemist
+
+		if("Geneticist")
+			O = new /datum/outfit/plasmaman/genetics
+
+		if("Roboticist")
+			O = new /datum/outfit/plasmaman/robotics
+
+		if("Virologist")
+			O = new /datum/outfit/plasmaman/viro
+
+		if("Scientist")
+			O = new /datum/outfit/plasmaman/science
+
+		if("Research Director")
+			O = new /datum/outfit/plasmaman/rd
+
+		if("Station Engineer")
+			O = new /datum/outfit/plasmaman/engineering
+
+		if("Chief Engineer")
+			O = new /datum/outfit/plasmaman/ce
+
+		if("Life Support Specialist")
+			O = new /datum/outfit/plasmaman/atmospherics
+
 		if("Mime")
-			suit=/obj/item/clothing/suit/space/eva/plasmaman/mime
-			helm=/obj/item/clothing/head/helmet/space/eva/plasmaman/mime
-	H.equip_or_collect(new suit(H), slot_wear_suit)
-	H.equip_or_collect(new helm(H), slot_head)
-	H.equip_or_collect(new /obj/item/weapon/tank/plasma/plasmaman(H), tank_slot) // Bigger plasma tank from Raggy.
-	H.equip_or_collect(new /obj/item/weapon/plasmensuit_cartridge(H), slot_in_backpack)
-	H.equip_or_collect(new /obj/item/weapon/plasmensuit_cartridge(H), slot_in_backpack) //Two refill cartridges for their suit. Can fit in boxes.
-	to_chat(H, "<span class='notice'>You are now running on plasma internals from the [H.s_store] in your [tank_slot_name]. You must breathe plasma in order to survive, and are extremely flammable.</span>")
-	H.internal = H.get_item_by_slot(tank_slot)
+			O = new /datum/outfit/plasmaman/mime
+
+		if("Clown")
+			O = new /datum/outfit/plasmaman/clown
+
+		if("Head of Personnel")
+			O = new /datum/outfit/plasmaman/hop
+
+		if("Captain")
+			O = new /datum/outfit/plasmaman/captain
+
+		if("Blueshield")
+			O = new /datum/outfit/plasmaman/blueshield
+
+		if("Assistant")
+			O = new /datum/outfit/plasmaman/assistant
+
+		if("Nanotrasen Career Trainer")
+			O = new /datum/outfit/plasmaman/trainer
+
+		if("Nanotrasen Navy Officer")
+			O = new /datum/outfit/plasmaman/navyofficer
+
+		if("Special Operations Officer", "Trans-Solar Federation General")
+			O = new /datum/outfit/plasmaman/soo
+
+	H.equipOutfit(O, visualsOnly)
 	H.update_action_buttons_icon()
 
-/datum/species/plasmaman/handle_life(var/mob/living/carbon/human/H)
-	if(!istype(H.wear_suit, /obj/item/clothing/suit/space/eva/plasmaman) || !istype(H.head, /obj/item/clothing/head/helmet/space/eva/plasmaman))
-		var/datum/gas_mixture/environment = H.loc.return_air()
-		if(environment && environment.oxygen && environment.oxygen >= OXYCONCEN_PLASMEN_IGNITION) //Plasmamen so long as there's enough oxygen (0.5 moles, same as it takes to burn gaseous plasma).
-			H.adjust_fire_stacks(0.5)
-			if(!H.on_fire && H.fire_stacks > 0)
-				H.visible_message("<span class='danger'>[H]'s body reacts with the atmosphere and bursts into flames!</span>","<span class='userdanger'>Your body reacts with the atmosphere and bursts into flame!</span>")
-			H.IgniteMob()
-	else
-		if(H.on_fire && H.fire_stacks > 0)
-			var/obj/item/clothing/suit/space/eva/plasmaman/P = H.wear_suit
-			if(istype(P))
-				P.Extinguish(H)
+/datum/species/plasmaman/handle_life(mob/living/carbon/human/H)
+	var/atmos_sealed = !HAS_TRAIT(H, TRAIT_NOFIRE) && (isclothing(H.wear_suit) && H.wear_suit.flags & STOPSPRESSUREDMAGE) && (isclothing(H.head) && H.head.flags & STOPSPRESSUREDMAGE)
+	if(!atmos_sealed && (!istype(H.w_uniform, /obj/item/clothing/under/plasmaman) || !istype(H.head, /obj/item/clothing/head/helmet/space/plasmaman) && !HAS_TRAIT(H, TRAIT_NOSELFIGNITION_HEAD_ONLY)))
+		var/datum/gas_mixture/environment = null
+		if(isobj(H.loc))
+			var/obj/O = H.loc
+			environment = O.return_obj_air()
+		if(isnull(environment))
+			var/turf/T = get_turf(H)
+			environment = T.get_readonly_air()
+		if(environment)
+			if(environment.total_moles())
+				if(!HAS_TRAIT(H, TRAIT_NOFIRE))
+					if(environment.oxygen() && environment.oxygen() >= OXYCONCEN_PLASMEN_IGNITION) //Same threshhold that extinguishes fire
+						H.adjust_fire_stacks(0.5)
+						if(!H.on_fire && H.fire_stacks > 0)
+							H.visible_message(SPAN_DANGER("[H]'s body reacts with the atmosphere and bursts into flames!"),SPAN_USERDANGER("Your body reacts with the atmosphere and bursts into flame!"))
+						H.IgniteMob()
+	else if(H.fire_stacks)
+		var/obj/item/clothing/under/plasmaman/P = H.w_uniform
+		if(istype(P))
+			P.Extinguish(H)
 	H.update_fire()
 	..()
 
-/datum/species/plasmaman/handle_reagents(var/mob/living/carbon/human/H, var/datum/reagent/R)
-	if(R.id == "plasma")
+/datum/species/plasmaman/handle_reagents(mob/living/carbon/human/H, datum/reagent/R)
+	if(R.id == "plasma" || R.id == "plasma_dust")
 		H.adjustBruteLoss(-0.5*REAGENTS_EFFECT_MULTIPLIER)
 		H.adjustFireLoss(-0.5*REAGENTS_EFFECT_MULTIPLIER)
-		H.adjustPlasma(20)
+		H.add_plasma(20)
 		H.reagents.remove_reagent(R.id, REAGENTS_METABOLISM)
-		return 0 //Handling reagent removal on our own. Prevents plasma from dealing toxin damage to Plasmamen.
+		return FALSE //Handling reagent removal on our own. Prevents plasma from dealing toxin damage to Plasmamen.
 
 	return ..()
+
+/datum/species/plasmaman/after_equip_job(datum/job/J, mob/living/carbon/human/H)
+	if(!H.mind || !H.mind.assigned_role || H.mind.assigned_role != "Clown" && H.mind.assigned_role != "Mime")
+		H.drop_item_to_ground(H.wear_mask)
+
+	H.equip_or_collect(new /obj/item/clothing/mask/breath(H), ITEM_SLOT_MASK)
+	var/tank_pref = H.client && H.client.prefs ? H.client.prefs.active_character.speciesprefs : null
+	var/obj/item/tank/internal_tank
+	if(tank_pref) //Diseasel, here you go
+		internal_tank = new /obj/item/tank/internals/plasmaman/full(H)
+	else
+		internal_tank = new /obj/item/tank/internals/plasmaman/belt/full(H)
+	if(!H.equip_to_appropriate_slot(internal_tank) && !H.put_in_any_hand_if_possible(internal_tank))
+		H.drop_item_to_ground(H.l_hand)
+		H.equip_or_collect(internal_tank, ITEM_SLOT_LEFT_HAND)
+		to_chat(H, SPAN_BOLDANNOUNCEOOC("Could not find an empty slot for internals! Please report this as a bug."))
+		stack_trace("Failed to equip plasmaman with a tank, with the job [J.type]")
+	H.internal = internal_tank
+	to_chat(H, SPAN_NOTICE("You are now running on plasma internals from [internal_tank]. Oxygen is toxic to your species, so you must breathe plasma only."))
+	H.update_action_buttons_icon()
+
+/datum/species/plasmaman/randomize_eye_color()
+	if(prob(2))
+		return rand_hex_color()
+	return tint_color_hsl("#FFAB00", 15)

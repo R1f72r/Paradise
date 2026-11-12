@@ -5,35 +5,55 @@
 // will always spawn at the items location.
 /////////////////////////////////////////////
 
+/proc/do_sparks(n, c, source)
+	// n - number of sparks
+	// c - cardinals, bool, do the sparks only move in cardinal directions?
+	// source - source of the sparks.
+
+	var/datum/effect_system/spark_spread/sparks = new
+	sparks.set_up(n, c, source)
+	sparks.autocleanup = TRUE
+	INVOKE_ASYNC(sparks, TYPE_PROC_REF(/datum/effect_system, start))
+
 /obj/effect/particle_effect/sparks
 	name = "sparks"
 	desc = "it's a spark what do you need to know?"
 	icon_state = "sparks"
-	anchored = 1
 	var/hotspottemp = 1000
 
 /obj/effect/particle_effect/sparks/New()
 	..()
-	playsound(loc, "sparks", 100, 1)
+	playsound(src, "sparks", 100, TRUE, SHORT_RANGE_SOUND_EXTRARANGE)
 	var/turf/T = loc
 	if(isturf(T))
-		T.hotspot_expose(hotspottemp, 100)
+		T.hotspot_expose(hotspottemp, 1)
 	QDEL_IN(src, 20)
 
 /obj/effect/particle_effect/sparks/Destroy()
 	var/turf/T = loc
 	if(isturf(T))
-		T.hotspot_expose(hotspottemp,100)
+		T.hotspot_expose(hotspottemp,1)
 	return ..()
 
 /obj/effect/particle_effect/sparks/Move()
 	..()
 	var/turf/T = loc
 	if(isturf(T))
-		T.hotspot_expose(hotspottemp,100)
+		T.hotspot_expose(hotspottemp,1)
 
 /datum/effect_system/spark_spread
 	effect_type = /obj/effect/particle_effect/sparks
+
+/datum/effect_system/spark_spread/generate_effect()
+	var/spark_budget = GLOBAL_SPARK_LIMIT - GLOB.sparks_active
+	if(spark_budget <= 0)
+		return
+	GLOB.sparks_active++
+	return ..()
+
+/datum/effect_system/spark_spread/decrement_total_effect()
+	GLOB.sparks_active--
+	return ..()
 
 //////////////////////////////////
 //////SPARKLE FIREWORKS

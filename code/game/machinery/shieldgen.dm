@@ -3,25 +3,20 @@
 		desc = "An energy shield used to contain hull breaches."
 		icon = 'icons/effects/effects.dmi'
 		icon_state = "shield-old"
-		density = 1
-		opacity = 0
-		anchored = 1
-		unacidable = 1
-		var/const/max_health = 200
-		var/health = max_health //The shield can only take so much beating (prevents perma-prisons)
+		density = TRUE
+		anchored = TRUE
+		move_resist = INFINITY
+		resistance_flags = LAVA_PROOF | FIRE_PROOF | UNACIDABLE | ACID_PROOF
+		flags_2 = RAD_NO_CONTAMINATE_2
 
-/obj/machinery/shield/New()
-	src.dir = pick(1,2,3,4)
-	..()
-
-/obj/machinery/shield/initialize()
-	air_update_turf(1)
-	..()
+/obj/machinery/shield/Initialize(mapload)
+	. = ..()
+	recalculate_atmos_connectivity()
+	GLOB.tesla_containment += src
 
 /obj/machinery/shield/Destroy()
-	opacity = 0
-	density = 0
-	air_update_turf(1)
+	recalculate_atmos_connectivity()
+	GLOB.tesla_containment -= src
 	return ..()
 
 /obj/machinery/shield/Move()
@@ -29,44 +24,8 @@
 	..()
 	move_update_air(T)
 
-/obj/machinery/shield/CanPass(atom/movable/mover, turf/target, height)
-	if(!height) return 0
-	else return ..()
-
-/obj/machinery/shield/CanAtmosPass(var/turf/T)
+/obj/machinery/shield/CanAtmosPass(direction)
 	return !density
-
-/obj/machinery/shield/attackby(obj/item/weapon/W as obj, mob/user as mob, params)
-	if(!istype(W)) return
-
-	//Calculate damage
-	var/aforce = W.force
-	if(W.damtype == BRUTE || W.damtype == BURN)
-		src.health -= aforce
-
-	//Play a fitting sound
-	playsound(src.loc, 'sound/effects/EMPulse.ogg', 75, 1)
-
-
-	if(src.health <= 0)
-		visible_message("<span class='notice'>The [src] dissipates</span>")
-		qdel(src)
-		return
-
-	opacity = 1
-	spawn(20) if(src) opacity = 0
-
-	..()
-
-/obj/machinery/shield/bullet_act(var/obj/item/projectile/Proj)
-	health -= Proj.damage
-	..()
-	if(health <=0)
-		visible_message("<span class='notice'>The [src] dissipates</span>")
-		qdel(src)
-		return
-	opacity = 1
-	spawn(20) if(src) opacity = 0
 
 /obj/machinery/shield/ex_act(severity)
 	switch(severity)
@@ -79,7 +38,6 @@
 		if(3.0)
 			if(prob(25))
 				qdel(src)
-	return
 
 /obj/machinery/shield/emp_act(severity)
 	switch(severity)
@@ -92,118 +50,159 @@
 /obj/machinery/shield/blob_act()
 	qdel(src)
 
+/obj/machinery/shield/cult
+	name = "cult barrier"
+	desc = "A shield summoned by cultists to keep heretics away."
+	max_integrity = 100
+	icon_state = "shield-cult"
 
-/obj/machinery/shield/hitby(AM as mob|obj)
-	..()
-	var/tforce = 0
-	if(ismob(AM))
-		tforce = 40
-	else if(isobj(AM))
-		var/obj/O = AM
-		tforce = O.throwforce
+/obj/machinery/shield/cult/emp_act(severity)
+	return
 
-	health -= tforce
+/obj/machinery/shield/cult/narsie
+	name = "sanguine barrier"
+	desc = "A potent shield summoned by cultists to defend their rites."
+	max_integrity = 60
 
-	//This seemed to be the best sound for hitting a force field.
-	playsound(loc, 'sound/effects/EMPulse.ogg', 100, 1)
+/obj/machinery/shield/cult/weak
+	name = "Invoker's Shield"
+	desc = "A weak shield summoned by cultists to protect them while they carry out delicate rituals."
+	max_integrity = 20
+	mouse_opacity = MOUSE_OPACITY_TRANSPARENT
+	layer = ABOVE_MOB_LAYER
 
-	//Handle the destruction of the shield
-	if(health <= 0)
-		visible_message("<span class='notice'>The [src] dissipates</span>")
-		qdel(src)
-		return
+/obj/machinery/shield/cult/barrier
+	density = FALSE
+	/// The rune that created the shield itself. Used to delete the rune when the shield is destroyed.
+	var/obj/effect/rune/parent_rune
 
-	//The shield becomes dense to absorb the blow.. purely asthetic.
-	opacity = 1
-	spawn(20)
-		if(src)
-			opacity = 0
+/obj/machinery/shield/cult/barrier/Initialize(mapload)
+	. = ..()
+	invisibility = INVISIBILITY_MAXIMUM
 
+/obj/machinery/shield/cult/barrier/Destroy()
+	if(parent_rune && !QDELETED(parent_rune))
+		QDEL_NULL(parent_rune)
+	return ..()
+
+/obj/machinery/shield/cult/barrier/attack_hand(mob/living/user)
+	parent_rune.attack_hand(user)
+
+/obj/machinery/shield/cult/barrier/attack_animal(mob/living/simple_animal/user)
+	if(IS_CULTIST(user))
+		parent_rune.attack_animal(user)
+	else
+		..()
+
+/**
+* Turns the shield on and off.
+*
+* The shield has 2 states: on and off. When on, it will block movement, projectiles, items, etc. and be clearly visible, and block atmospheric gases.
+* When off, the rune no longer blocks anything and turns invisible.
+* The barrier itself is not intended to interact with the conceal runes cult spell for balance purposes.
+*/
+/obj/machinery/shield/cult/barrier/proc/Toggle()
+	var/visible
+	if(!density) // Currently invisible
+		density = TRUE // Turn visible
+		invisibility = initial(invisibility)
+		visible = TRUE
+	else // Currently visible
+		density = FALSE // Turn invisible
+		invisibility = INVISIBILITY_MAXIMUM
+		visible = FALSE
+
+	recalculate_atmos_connectivity()
+	return visible
 
 /obj/machinery/shieldgen
-	name = "Emergency shield projector"
+	name = "emergency shield projector"
 	desc = "Used to seal minor hull breaches."
 	icon = 'icons/obj/objects.dmi'
 	icon_state = "shieldoff"
-	density = 1
-	opacity = 0
-	anchored = 0
+	density = TRUE
 	pressure_resistance = 2*ONE_ATMOSPHERE
-	req_access = list(access_engine)
+	req_access = list(ACCESS_ENGINE)
 	var/const/max_health = 100
 	var/health = max_health
-	var/active = 0
-	var/malfunction = 0 //Malfunction causes parts of the shield to slowly dissapate
+	var/active = FALSE
+	var/malfunction = FALSE //Malfunction causes parts of the shield to slowly dissapate
 	var/list/deployed_shields = list()
-	var/is_open = 0 //Whether or not the wires are exposed
-	var/locked = 0
+	var/is_open = FALSE //Whether or not the wires are exposed
+	var/locked = FALSE
+	var/shield_range = 2
 
 /obj/machinery/shieldgen/Destroy()
-	QDEL_LIST(deployed_shields)
+	QDEL_LIST_CONTENTS(deployed_shields)
 	deployed_shields = null
 	return ..()
 
 
 /obj/machinery/shieldgen/proc/shields_up()
-	if(active) return 0 //If it's already turned on, how did this get called?
+	if(active)
+		return //If it's already turned on, how did this get called?
 
-	src.active = 1
-	update_icon()
+	active = TRUE
+	update_icon(UPDATE_ICON_STATE)
+	anchored = TRUE
 
-	for(var/turf/target_tile in range(2, src))
-		if(istype(target_tile,/turf/space) && !(locate(/obj/machinery/shield) in target_tile))
+	for(var/turf/target_tile in range(shield_range, src))
+		if(isspaceturf(target_tile) && !(locate(/obj/machinery/shield) in target_tile))
 			if(malfunction && prob(33) || !malfunction)
-				deployed_shields += new /obj/machinery/shield(target_tile)
+				var/obj/machinery/shield/new_shield = new(target_tile)
+				RegisterSignal(new_shield, COMSIG_PARENT_QDELETING, PROC_REF(remove_shield)) // Ensures they properly GC
+				deployed_shields += new_shield
+
+/obj/machinery/shieldgen/proc/remove_shield(obj/machinery/shield/S)
+	deployed_shields -= S
 
 /obj/machinery/shieldgen/proc/shields_down()
-	if(!active) return 0 //If it's already off, how did this get called?
+	if(!active)
+		return //If it's already off, how did this get called?
 
-	src.active = 0
-	update_icon()
+	active = FALSE
+	update_icon(UPDATE_ICON_STATE)
 
-	for(var/obj/machinery/shield/shield_tile in deployed_shields)
-		qdel(shield_tile)
+	QDEL_LIST_CONTENTS(deployed_shields)
 
 /obj/machinery/shieldgen/process()
 	if(malfunction && active)
-		if(deployed_shields.len && prob(5))
-			qdel(pick(deployed_shields))
-
-	return
+		if(length(deployed_shields) && prob(5))
+			qdel(pick_n_take(deployed_shields))
 
 /obj/machinery/shieldgen/proc/checkhp()
 	if(health <= 30)
-		src.malfunction = 1
+		malfunction = TRUE
 	if(health <= 0)
 		qdel(src)
-	update_icon()
+	update_icon(UPDATE_ICON_STATE)
 	return
 
 /obj/machinery/shieldgen/ex_act(severity)
 	switch(severity)
 		if(1.0)
-			src.health -= 75
-			src.checkhp()
+			health -= 75
+			checkhp()
 		if(2.0)
-			src.health -= 30
+			health -= 30
 			if(prob(15))
-				src.malfunction = 1
-			src.checkhp()
+				malfunction = TRUE
+			checkhp()
 		if(3.0)
-			src.health -= 10
-			src.checkhp()
+			health -= 10
+			checkhp()
 	return
 
 /obj/machinery/shieldgen/emp_act(severity)
 	switch(severity)
 		if(1)
-			src.health /= 2 //cut health in half
-			malfunction = 1
-			locked = pick(0,1)
+			health = health * 0.5 //cut health in half
+			malfunction = TRUE
+			locked = pick(TRUE, FALSE)
 		if(2)
 			if(prob(50))
-				src.health *= 0.3 //chop off a third of the health
-				malfunction = 1
+				health *= 0.3 //chop off a third of the health
+				malfunction = TRUE
 	checkhp()
 
 /obj/machinery/shieldgen/attack_hand(mob/user as mob)
@@ -214,358 +213,307 @@
 		to_chat(user, "The panel must be closed before operating this machine.")
 		return
 
-	if(src.active)
-		user.visible_message("<span class='notice'>[bicon(src)] [user] deactivated the shield generator.</span>", \
-			"<span class='notice'>[bicon(src)] You deactivate the shield generator.</span>", \
+	if(active)
+		user.visible_message(SPAN_NOTICE("[bicon(src)] [user] deactivated the shield generator."), \
+			SPAN_NOTICE("[bicon(src)] You deactivate the shield generator."), \
 			"You hear heavy droning fade out.")
-		src.shields_down()
+		shields_down()
 	else
 		if(anchored)
-			user.visible_message("<span class='notice'>[bicon(src)] [user] activated the shield generator.</span>", \
-				"<span class='notice'>[bicon(src)] You activate the shield generator.</span>", \
+			user.visible_message(SPAN_NOTICE("[bicon(src)] [user] activated the shield generator."), \
+				SPAN_NOTICE("[bicon(src)] You activate the shield generator."), \
 				"You hear heavy droning.")
-			src.shields_up()
+			shields_up()
 		else
 			to_chat(user, "The device must first be secured to the floor.")
-	return
 
-/obj/machinery/shieldgen/attackby(obj/item/weapon/W as obj, mob/user as mob, params)
-	if(istype(W, /obj/item/weapon/card/emag))
-		malfunction = 1
-		update_icon()
+/obj/machinery/shieldgen/item_interaction(mob/living/user, obj/item/used, list/modifiers)
+	if(istype(used, /obj/item/card/emag))
+		malfunction = TRUE
+		update_icon(UPDATE_ICON_STATE)
 
-	else if(istype(W, /obj/item/weapon/screwdriver))
-		playsound(src.loc, W.usesound, 100, 1)
-		if(is_open)
-			to_chat(user, "<span class='notice'>You close the panel.</span>")
-			is_open = 0
-		else
-			to_chat(user, "<span class='notice'>You open the panel and expose the wiring.</span>")
-			is_open = 1
-
-	else if(istype(W, /obj/item/stack/cable_coil) && malfunction && is_open)
-		var/obj/item/stack/cable_coil/coil = W
-		to_chat(user, "<span class='notice'>You begin to replace the wires.</span>")
-		//if(do_after(user, min(60, round( ((maxhealth/health)*10)+(malfunction*10) ), target = src)) //Take longer to repair heavier damage
+		return ITEM_INTERACT_COMPLETE
+	if(istype(used, /obj/item/stack/cable_coil) && malfunction && is_open)
+		var/obj/item/stack/cable_coil/coil = used
+		to_chat(user, SPAN_NOTICE("You begin to replace the wires."))
 		if(do_after(user, 30 * coil.toolspeed, target = src))
-			if(!src || !coil) return
+			if(!src || !coil)
+				return ITEM_INTERACT_COMPLETE
 			coil.use(1)
 			health = max_health
-			malfunction = 0
+			malfunction = FALSE
 			playsound(loc, coil.usesound, 50, 1)
-			to_chat(user, "<span class='notice'>You repair the [src]!</span>")
-			update_icon()
+			to_chat(user, SPAN_NOTICE("You repair [src]!"))
+			update_icon(UPDATE_ICON_STATE)
 
-	else if(istype(W, /obj/item/weapon/wrench))
-		if(locked)
-			to_chat(user, "The bolts are covered, unlocking this would retract the covers.")
-			return
-		if(anchored)
-			playsound(src.loc, W.usesound, 100, 1)
-			to_chat(user, "<span class='notice'>You unsecure the [src] from the floor!</span>")
-			if(active)
-				to_chat(user, "<span class='notice'>The [src] shuts off!</span>")
-				src.shields_down()
-			anchored = 0
+		return ITEM_INTERACT_COMPLETE
+	if(istype(used, /obj/item/card/id) || istype(used, /obj/item/pda))
+		if(allowed(user))
+			locked = !locked
+			to_chat(user, "The controls are now [locked ? "locked." : "unlocked."]")
 		else
-			if(istype(get_turf(src), /turf/space)) return //No wrenching these in space!
-			playsound(src.loc, W.usesound, 100, 1)
-			to_chat(user, "<span class='notice'>You secure the [src] to the floor!</span>")
-			anchored = 1
+			to_chat(user, SPAN_WARNING("Access denied."))
 
+		return ITEM_INTERACT_COMPLETE
 
-	else if(istype(W, /obj/item/weapon/card/id) || istype(W, /obj/item/device/pda))
-		if(src.allowed(user))
-			src.locked = !src.locked
-			to_chat(user, "The controls are now [src.locked ? "locked." : "unlocked."]")
-		else
-			to_chat(user, "<span class='warning'>Access denied.</span>")
-
-	else
-		..()
-
-
-/obj/machinery/shieldgen/update_icon()
-	if(active)
-		src.icon_state = malfunction ? "shieldonbr":"shieldon"
-	else
-		src.icon_state = malfunction ? "shieldoffbr":"shieldoff"
-	return
-
-////FIELD GEN START //shameless copypasta from fieldgen, powersink, and grille
-#define maxstoredpower 500
-/obj/machinery/shieldwallgen
-		name = "Shield Generator"
-		desc = "A shield generator."
-		icon = 'icons/obj/stationobjs.dmi'
-		icon_state = "Shield_Gen"
-		anchored = 0
-		density = 1
-		req_access = list(access_teleporter)
-		var/active = 0
-		var/power = 0
-		var/state = 0
-		var/steps = 0
-		var/last_check = 0
-		var/check_delay = 10
-		var/recalc = 0
-		var/locked = 1
-		var/destroyed = 0
-		var/directwired = 1
-//		var/maxshieldload = 200
-		var/obj/structure/cable/attached		// the attached cable
-		var/storedpower = 0
-		flags = CONDUCT
-		use_power = 0
-
-/obj/machinery/shieldwallgen/proc/power()
-	if(!anchored)
-		power = 0
-		return 0
-	var/turf/T = src.loc
-
-	var/obj/structure/cable/C = T.get_cable_node()
-	var/datum/powernet/PN
-	if(C)	PN = C.powernet		// find the powernet of the connected cable
-
-	if(!PN)
-		power = 0
-		return 0
-
-	var/surplus = max(PN.avail-PN.load, 0)
-	var/shieldload = min(rand(50,200), surplus)
-	if(shieldload==0 && !storedpower)		// no cable or no power, and no power stored
-		power = 0
-		return 0
-	else
-		power = 1	// IVE GOT THE POWER!
-		if(PN) //runtime errors fixer. They were caused by PN.load trying to access missing network in case of working on stored power.
-			storedpower += shieldload
-			PN.load += shieldload //uses powernet power.
-//		message_admins("[PN.load]", 1)
-//		use_power(250) //uses APC power
-
-/obj/machinery/shieldwallgen/attack_hand(mob/user as mob)
-	if(state != 1)
-		to_chat(user, "<span class='warning'>The shield generator needs to be firmly secured to the floor first.</span>")
-		return 1
-	if(src.locked && !istype(user, /mob/living/silicon))
-		to_chat(user, "<span class='warning'>The controls are locked!</span>")
-		return 1
-	if(power != 1)
-		to_chat(user, "<span class='warning'>The shield generator needs to be powered by wire underneath.</span>")
-		return 1
-
-	if(src.active >= 1)
-		src.active = 0
-		icon_state = "Shield_Gen"
-
-		user.visible_message("[user] turned the shield generator off.", \
-			"You turn off the shield generator.", \
-			"You hear heavy droning fade out.")
-		for(var/dir in list(1,2,4,8)) src.cleanup(dir)
-	else
-		src.active = 1
-		icon_state = "Shield_Gen +a"
-		user.visible_message("[user] turned the shield generator on.", \
-			"You turn on the shield generator.", \
-			"You hear heavy droning.")
-	src.add_fingerprint(user)
-
-/obj/machinery/shieldwallgen/process()
-	spawn(100)
-		power()
-		if(power)
-			storedpower -= 50 //this way it can survive longer and survive at all
-	if(storedpower >= maxstoredpower)
-		storedpower = maxstoredpower
-	if(storedpower <= 0)
-		storedpower = 0
-//	if(shieldload >= maxshieldload) //there was a loop caused by specifics of process(), so this was needed.
-//		shieldload = maxshieldload
-
-	if(src.active == 1)
-		if(!src.state == 1)
-			src.active = 0
-			return
-		spawn(1)
-			setup_field(1)
-		spawn(2)
-			setup_field(2)
-		spawn(3)
-			setup_field(4)
-		spawn(4)
-			setup_field(8)
-		src.active = 2
-	if(src.active >= 1)
-		if(src.power == 0)
-			src.visible_message("<span class='warning'>The [src.name] shuts down due to lack of power!</span>", \
-				"You hear heavy droning fade out")
-			icon_state = "Shield_Gen"
-			src.active = 0
-			for(var/dir in list(1,2,4,8)) src.cleanup(dir)
-
-/obj/machinery/shieldwallgen/proc/setup_field(var/NSEW = 0)
-	var/turf/T = src.loc
-	var/turf/T2 = src.loc
-	var/obj/machinery/shieldwallgen/G
-	var/steps = 0
-	var/oNSEW = 0
-
-	if(!NSEW)//Make sure its ran right
-		return
-
-	if(NSEW == 1)
-		oNSEW = 2
-	else if(NSEW == 2)
-		oNSEW = 1
-	else if(NSEW == 4)
-		oNSEW = 8
-	else if(NSEW == 8)
-		oNSEW = 4
-
-	for(var/dist = 0, dist <= 9, dist += 1) // checks out to 8 tiles away for another generator
-		T = get_step(T2, NSEW)
-		T2 = T
-		steps += 1
-		if(locate(/obj/machinery/shieldwallgen) in T)
-			G = (locate(/obj/machinery/shieldwallgen) in T)
-			steps -= 1
-			if(!G.active)
-				return
-			G.cleanup(oNSEW)
-			break
-
-	if(isnull(G))
-		return
-
-	T2 = src.loc
-
-	for(var/dist = 0, dist < steps, dist += 1) // creates each field tile
-		var/field_dir = get_dir(T2,get_step(T2, NSEW))
-		T = get_step(T2, NSEW)
-		T2 = T
-		var/obj/machinery/shieldwall/CF = new/obj/machinery/shieldwall/(src, G) //(ref to this gen, ref to connected gen)
-		CF.loc = T
-		CF.dir = field_dir
-
-
-/obj/machinery/shieldwallgen/attackby(obj/item/W, mob/user, params)
-	if(istype(W, /obj/item/weapon/wrench))
-		if(active)
-			to_chat(user, "Turn off the field generator first.")
-			return
-
-		else if(state == 0)
-			state = 1
-			playsound(src.loc, W.usesound, 75, 1)
-			to_chat(user, "You secure the external reinforcing bolts to the floor.")
-			src.anchored = 1
-			return
-
-		else if(state == 1)
-			state = 0
-			playsound(src.loc, W.usesound, 75, 1)
-			to_chat(user, "You undo the external reinforcing bolts.")
-			src.anchored = 0
-			return
-
-	if(istype(W, /obj/item/weapon/card/id)||istype(W, /obj/item/device/pda))
-		if(src.allowed(user))
-			src.locked = !src.locked
-			to_chat(user, "Controls are now [src.locked ? "locked." : "unlocked."]")
-		else
-			to_chat(user, "<span class='warning'>Access denied.</span>")
-
-	else
-		add_fingerprint(user)
-		..()
-
-/obj/machinery/shieldwallgen/proc/cleanup(var/NSEW)
-	var/obj/machinery/shieldwall/F
-	var/obj/machinery/shieldwallgen/G
-	var/turf/T = src.loc
-	var/turf/T2 = src.loc
-
-	for(var/dist = 0, dist <= 9, dist += 1) // checks out to 8 tiles away for fields
-		T = get_step(T2, NSEW)
-		T2 = T
-		if(locate(/obj/machinery/shieldwall) in T)
-			F = (locate(/obj/machinery/shieldwall) in T)
-			qdel(F)
-
-		if(locate(/obj/machinery/shieldwallgen) in T)
-			G = (locate(/obj/machinery/shieldwallgen) in T)
-			if(!G.active)
-				break
-
-/obj/machinery/shieldwallgen/Destroy()
-	src.cleanup(1)
-	src.cleanup(2)
-	src.cleanup(4)
-	src.cleanup(8)
 	return ..()
 
-/obj/machinery/shieldwallgen/bullet_act(var/obj/item/projectile/Proj)
-	storedpower -= Proj.damage
+/obj/machinery/shieldgen/screwdriver_act(mob/user, obj/item/I)
+	. = TRUE
+	if(!I.use_tool(src, user, 0, volume = I.tool_volume))
+		return
+	is_open = !is_open
+	if(is_open)
+		SCREWDRIVER_OPEN_PANEL_MESSAGE
+	else
+		SCREWDRIVER_CLOSE_PANEL_MESSAGE
+
+/obj/machinery/shieldgen/wrench_act(mob/user, obj/item/I)
+	. = TRUE
+	if(locked)
+		to_chat(user, "The bolts are covered, unlocking this would retract the covers.")
+		return
+	if(!I.use_tool(src, user, 0, volume = I.tool_volume))
+		return
+	if(anchored)
+		WRENCH_UNANCHOR_MESSAGE
+		if(active)
+			visible_message(SPAN_WARNING("[src] shuts off!"))
+			shields_down()
+	else
+		if(isspaceturf(get_turf(src)))
+			return //No wrenching these in space!
+		WRENCH_ANCHOR_MESSAGE
+	anchored = !anchored
+
+/obj/machinery/shieldgen/update_icon_state()
+	icon_state = "shield[active ? "on" : "off"][malfunction ? "br" : ""]"
+
+/obj/machinery/shieldgen/onShuttleMove(turf/oldT, turf/T1, rotation, mob/calling_mob)
+	. = ..()
+	if(active)
+		shields_down()
+		addtimer(CALLBACK(src, PROC_REF(shields_up)), 1 SECONDS)//Lets docking finish, prevents placing shields on shuttle tiles.
+
+/obj/machinery/shieldgen/raven
+	name = "military shield generator"
+	desc = "Military grade shield generators used to protect spaceships from incoming fire."
+	shield_range = 4
+	anchored = TRUE
+
+////FIELD GEN START //shameless copypasta from fieldgen, powersink, and grille
+#define MAX_STORED_POWER 500
+/obj/machinery/shieldwallgen
+	name = "Shield Generator"
+	desc = "A shield generator."
+	icon_state = "Shield_Gen"
+	density = TRUE
+	req_access = list(ACCESS_TELEPORTER)
+	flags = CONDUCT
+	power_state = NO_POWER_USE
+
+	var/activated = FALSE
+	var/locked = TRUE
+	var/list/active_shields
+	var/stored_power = 0
+
+/obj/machinery/shieldwallgen/Initialize(mapload)
+	. = ..()
+	active_shields = list() // Doing it here since you can't cast numeral defines to strings using "[NORTH]" in the definition
+	for(var/direction in GLOB.cardinal)
+		active_shields["[direction]"] = list()
+	if(!activated)
+		STOP_PROCESSING(SSmachines, src)
+
+/obj/machinery/shieldwallgen/update_icon_state()
+	icon_state = "Shield_Gen[activated ? " +a" : ""]"
+
+/obj/machinery/shieldwallgen/proc/try_charge_shields_power()
+	var/turf/T = loc
+
+	var/obj/structure/cable/C = T.get_cable_node()
+	var/datum/regional_powernet/PN = C?.powernet // find the powernet of the connected cable
+
+	if(!PN)
+		deactivate()
+		return FALSE
+
+	var/surplus = max(PN.available_power - PN.power_demand, 0)
+	var/shieldload = min(rand(50, 200), surplus)
+	if(!shieldload && stored_power <= 0)		// no cable or no power, and no power stored
+		deactivate()
+		return FALSE
+
+	stored_power += min(shieldload, MAX_STORED_POWER - stored_power)
+	PN.power_demand += shieldload //uses powernet power.
+	return TRUE
+
+/obj/machinery/shieldwallgen/attack_hand(mob/user)
+	if(!anchored)
+		to_chat(user, SPAN_WARNING("The shield generator needs to be firmly secured to the floor first."))
+		return TRUE
+	if(locked && !issilicon(user))
+		to_chat(user, SPAN_WARNING("The controls are locked!"))
+		return TRUE
+	var/turf/T = loc
+	if(!T.get_cable_node())
+		to_chat(user, SPAN_WARNING("The shield generator needs to be powered by wire underneath."))
+		return TRUE
+
+	if(!activated)
+		activate()
+	else
+		deactivate()
+
+	user.visible_message(SPAN_NOTICE("[user] turned the shield generator [activated ? "on" : "off"]."), \
+		SPAN_NOTICE("You turn [activated ? "on" : "off"] the shield generator."), \
+		"You hear heavy droning [activated ? "" : "fade out"].")
+
+	update_icon(UPDATE_ICON_STATE)
+	add_fingerprint(user)
+
+/obj/machinery/shieldwallgen/process()
+	if(!try_charge_shields_power())
+		visible_message(SPAN_WARNING("[name] shuts down due to lack of power!"), \
+				"You hear heavy droning fade out")
+		deactivate()
+		update_icon(UPDATE_ICON_STATE)
+
+
+/obj/machinery/shieldwallgen/proc/activate()
+	activated = TRUE
+	START_PROCESSING(SSmachines, src)
+	update_icon(UPDATE_ICON_STATE)
+	for(var/direction in GLOB.cardinal)
+		INVOKE_ASYNC(src, PROC_REF(try_link_generators), direction)
+
+/obj/machinery/shieldwallgen/proc/try_link_generators(direction)
+	var/turf/current_turf = loc
+	var/obj/machinery/shieldwallgen/other_generator
+	var/list/traveled_turfs = list()
+	for(var/distance in 1 to 9)
+		current_turf = get_step(current_turf, direction)
+		if(iswallturf(current_turf)) // Should go through windows etc
+			return
+		other_generator = locate(/obj/machinery/shieldwallgen) in current_turf
+		if(other_generator)
+			break
+		traveled_turfs += current_turf
+
+	if(!other_generator?.activated)
+		return
+
+	sleep(rand(1, 4)) // TODO check if we want this behaviour
+
+	var/opposite_direction = turn(direction, 180)
+	for(var/T in traveled_turfs)
+		var/obj/machinery/shieldwall/SW = new /obj/machinery/shieldwall(T, src, other_generator) //(ref to this gen, ref to connected gen)
+		SW.dir = direction
+		add_overlay("shield_[direction]")
+		active_shields["[direction]"] += SW
+		other_generator.active_shields["[opposite_direction]"] += SW
+		other_generator.add_overlay("shield_[opposite_direction]")
+
+/obj/machinery/shieldwallgen/proc/deactivate()
+	activated = FALSE
+	STOP_PROCESSING(SSmachines, src)
+	for(var/direction in GLOB.cardinal)
+		cut_overlay("shield_[direction]")
+		var/list/L = active_shields["[direction]"]
+		QDEL_LIST_CONTENTS(L) // Don't want to clean the assoc keys so no QDEL_LIST_ASSOC_VAL
+
+/obj/machinery/shieldwallgen/proc/remove_active_shield(obj/machinery/shieldwall/SW, direction)
+	var/list/L = active_shields["[direction]"]
+	cut_overlay("shield_[direction]")
+	L -= SW
+
+/obj/machinery/shieldwallgen/item_interaction(mob/living/user, obj/item/used, list/modifiers)
+	if(istype(used, /obj/item/card/id)||istype(used, /obj/item/pda))
+		if(allowed(user))
+			locked = !locked
+			to_chat(user, "Controls are now [locked ? "locked." : "unlocked."]")
+		else
+			to_chat(user, SPAN_WARNING("Access denied."))
+
+		return ITEM_INTERACT_COMPLETE
+
+	add_fingerprint(user)
+	return ..()
+
+/obj/machinery/shieldwallgen/wrench_act(mob/user, obj/item/I)
+	. = TRUE
+	if(activated)
+		to_chat(user, SPAN_WARNING("Turn off the field generator first."))
+		return
+	if(!I.use_tool(src, user, 0, volume = I.tool_volume))
+		return
+	anchored = !anchored
+	to_chat(user, anchored ? "You secure the external reinforcing bolts to the floor." : "You undo the external reinforcing bolts.")
+
+/obj/machinery/shieldwallgen/Destroy()
+	deactivate()
+	return ..()
+
+/obj/machinery/shieldwallgen/bullet_act(obj/projectile/Proj)
+	stored_power -= Proj.damage
 	..()
 	return
 
 
-//////////////Containment Field START
+////////////// Containment Field START
 /obj/machinery/shieldwall
-		name = "Shield"
-		desc = "An energy shield."
-		icon = 'icons/effects/effects.dmi'
-		icon_state = "shieldwall"
-		anchored = 1
-		density = 1
-		unacidable = 1
-		luminosity = 3
-		var/needs_power = 0
-		var/active = 1
-//		var/power = 10
-		var/delay = 5
-		var/last_active
-		var/mob/U
-		var/obj/machinery/shieldwallgen/gen_primary
-		var/obj/machinery/shieldwallgen/gen_secondary
+	name = "Shield"
+	desc = "An energy shield."
+	icon = 'icons/effects/effects.dmi'
+	icon_state = "shieldwall"
+	anchored = TRUE
+	density = TRUE
+	move_resist = INFINITY
+	resistance_flags = INDESTRUCTIBLE | LAVA_PROOF | FIRE_PROOF | UNACIDABLE | ACID_PROOF
+	light_range = 3
+	var/needs_power = FALSE
+	var/active = TRUE
+	var/obj/machinery/shieldwallgen/gen_primary
+	var/obj/machinery/shieldwallgen/gen_secondary
 
-/obj/machinery/shieldwall/New(var/obj/machinery/shieldwallgen/A, var/obj/machinery/shieldwallgen/B)
-	..()
-	src.gen_primary = A
-	src.gen_secondary = B
+/obj/machinery/shieldwall/Initialize(mapload, obj/machinery/shieldwallgen/A, obj/machinery/shieldwallgen/B)
+	. = ..()
+	gen_primary = A
+	gen_secondary = B
 	if(A && B)
-		needs_power = 1
+		needs_power = TRUE
+	GLOB.tesla_containment += src
 
-/obj/machinery/shieldwall/attack_hand(mob/user as mob)
+/obj/machinery/shieldwall/Destroy()
+	gen_primary?.remove_active_shield(src, dir)
+	gen_secondary?.remove_active_shield(src, turn(dir, 180))
+	gen_primary = null
+	gen_secondary = null
+	GLOB.tesla_containment -= src
+	return ..()
+
+/obj/machinery/shieldwall/attack_hand(mob/user)
 	return
 
+/obj/machinery/shieldwall/rpd_blocksusage()
+	return TRUE
 
 /obj/machinery/shieldwall/process()
 	if(needs_power)
-		if(isnull(gen_primary)||isnull(gen_secondary))
-			qdel(src)
-			return
-
-		if(!(gen_primary.active)||!(gen_secondary.active))
-			qdel(src)
-			return
-//
 		if(prob(50))
-			gen_primary.storedpower -= 10
+			gen_primary.stored_power = max(gen_primary.stored_power - 10, 0)
 		else
-			gen_secondary.storedpower -=10
+			gen_secondary.stored_power = max(gen_secondary.stored_power - 10, 0)
 
 
-/obj/machinery/shieldwall/bullet_act(var/obj/item/projectile/Proj)
+/obj/machinery/shieldwall/bullet_act(obj/projectile/Proj)
 	if(needs_power)
 		var/obj/machinery/shieldwallgen/G
 		if(prob(50))
 			G = gen_primary
 		else
 			G = gen_secondary
-		G.storedpower -= Proj.damage
+		G.stored_power -= Proj.damage
 	..()
 	return
 
@@ -579,31 +527,87 @@
 					G = gen_primary
 				else
 					G = gen_secondary
-				G.storedpower -= 200
+				G.stored_power -= 200
 
 			if(2.0) //medium boom
 				if(prob(50))
 					G = gen_primary
 				else
 					G = gen_secondary
-				G.storedpower -= 50
+				G.stored_power -= 50
 
 			if(3.0) //lil boom
 				if(prob(50))
 					G = gen_primary
 				else
 					G = gen_secondary
-				G.storedpower -= 20
+				G.stored_power -= 20
 	return
 
 
-/obj/machinery/shieldwall/CanPass(atom/movable/mover, turf/target, height=0)
-	if(height==0) return 1
-
+/obj/machinery/shieldwall/CanPass(atom/movable/mover, border_dir)
 	if(istype(mover) && mover.checkpass(PASSGLASS))
 		return prob(20)
 	else
-		if(istype(mover, /obj/item/projectile))
+		if(isprojectile(mover))
 			return prob(10)
 		else
-			return !src.density
+			return !density
+
+
+/obj/machinery/shieldwall/syndicate
+	name = "energy shield"
+	desc = "A strange energy shield."
+	icon_state = "shield-red"
+
+/obj/machinery/shieldwall/syndicate/CanPass(atom/movable/mover, border_dir)
+	if(isliving(mover))
+		var/mob/living/M = mover
+		if("syndicate" in M.faction)
+			return TRUE
+	if(isprojectile(mover))
+		return FALSE
+	return ..()
+
+/obj/machinery/shieldwall/syndicate/CanPathfindPass(to_dir, datum/can_pass_info/pass_info)
+	if(pass_info.is_living && ("syndicate" in pass_info.factions))
+		return TRUE
+	return ..(to_dir, pass_info)
+
+/obj/machinery/shieldwall/syndicate/proc/phaseout()
+	// If you're bumping into an invisible shield, make it fully visible, then fade out over a couple of seconds.
+	if(alpha == 0)
+		alpha = 255
+		animate(src, alpha = 10, time = 20, easing = EASE_OUT)
+		spawn(20)
+			alpha = 0
+
+/obj/machinery/shieldwall/syndicate/Bumped(atom/user)
+	phaseout()
+	return ..()
+
+/obj/machinery/shieldwall/syndicate/item_interaction(mob/living/user, obj/item/used, list/modifiers)
+	phaseout()
+	return ..()
+
+/obj/machinery/shieldwall/syndicate/bullet_act(obj/projectile/Proj)
+	phaseout()
+	return ..()
+
+/obj/machinery/shieldwall/syndicate/ex_act(severity)
+	phaseout()
+	return ..()
+
+/obj/machinery/shieldwall/syndicate/emp_act(severity)
+	phaseout()
+	return ..()
+
+/obj/machinery/shieldwall/syndicate/attack_hand(mob/user)
+	phaseout()
+	return ..()
+
+/obj/machinery/shieldwall/syndicate/hitby(atom/movable/AM, skipcatch, hitpush, blocked, datum/thrownthing/throwingdatum)
+	phaseout()
+	return ..()
+
+#undef MAX_STORED_POWER

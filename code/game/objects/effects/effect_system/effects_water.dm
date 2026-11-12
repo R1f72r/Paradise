@@ -14,15 +14,31 @@
 		return 0
 	if(newloc.density)
 		return 0
-	.=..()
+	. = ..()
 
 /obj/effect/particle_effect/water/Bump(atom/A)
 	if(reagents)
 		reagents.reaction(A)
 	if(istype(A,/atom/movable))
 		var/atom/movable/AM = A
-		AM.water_act(life, 310.15, src)
+		AM.water_act(life, COLD_WATER_TEMPERATURE, src)
 	return ..()
+
+/obj/effect/particle_effect/water/proc/extinguish_move(turf/target)
+	for(var/counter in 1 to 5)
+		if(!step_towards(src, target) && counter != 1)
+			return
+		var/turf/current_turf = get_turf(src)
+		reagents.reaction(current_turf)
+		for(var/atom/atm in current_turf)
+			reagents.reaction(atm)
+			if(isliving(atm)) //For extinguishing mobs on fire
+				var/mob/living/M = atm
+				M.ExtinguishMob()
+
+		if(current_turf == target)
+			return
+		sleep(2)
 
 /////////////////////////////////////////////
 // GENERIC STEAM SPREAD SYSTEM
@@ -33,16 +49,15 @@
 // will always spawn at the items location, even if it's moved.
 
 /* Example:
-var/datum/effect_system/steam_spread/steam = new /datum/effect_system/steam_spread() -- creates new system
-steam.set_up(5, 0, mob.loc) -- sets up variables
-OPTIONAL: steam.attach(mob)
-steam.start() -- spawns the effect
+	var/datum/effect_system/steam_spread/steam = new /datum/effect_system/steam_spread() -- creates new system
+	steam.set_up(5, 0, mob.loc) -- sets up variables
+	OPTIONAL: steam.attach(mob)
+	steam.start() -- spawns the effect
 */
 /////////////////////////////////////////////
 /obj/effect/particle_effect/steam
 	name = "steam"
 	icon_state = "extinguish"
-	density = 0
 
 /obj/effect/particle_effect/steam/New()
 	..()

@@ -1,12 +1,24 @@
+/// at least 75% rad armor is required to be immune to this event
+#define RAD_ARMOR_TO_IMMUNITY 150
+
+/datum/event/mass_hallucination
+	name = "Mass Hallucination"
+
 /datum/event/mass_hallucination/setup()
 	announceWhen = rand(0, 20)
 
 /datum/event/mass_hallucination/start()
-	for(var/mob/living/carbon/human/H in living_mob_list)
-		var/armor = H.getarmor(type = "rad")
-		if((RADIMMUNE in H.species.species_traits) || armor >= 75) // Leave radiation-immune species/rad armored players completely unaffected
+	for(var/mob/living/carbon/human/human as anything in GLOB.human_list)
+		if(human.stat == DEAD)
 			continue
-		H.AdjustHallucinate(rand(50, 100))
+		var/turf/turf = get_turf(human)
+		if(!is_station_level(turf?.z))
+			continue
+		if(HAS_TRAIT(human, TRAIT_RADIMMUNE) || human.getarmor(armor_type = RAD) >= RAD_ARMOR_TO_IMMUNITY) // Leave radiation-immune species/rad armored players completely unaffected
+			continue
+		human.AdjustHallucinate(rand(50 SECONDS, 100 SECONDS))
 
 /datum/event/mass_hallucination/announce()
-	event_announcement.Announce("It seems that station [station_name()] is passing through a minor radiation field, this may cause some hallucination, but no further damage")
+	GLOB.minor_announcement.Announce("The [station_name()] is passing through a minor radiation field. Be advised that acute exposure to space radiation can induce hallucinogenic episodes.", "Minor Radiation Field Detected",'sound/AI/hallucination.ogg')
+
+#undef RAD_ARMOR_TO_IMMUNITY

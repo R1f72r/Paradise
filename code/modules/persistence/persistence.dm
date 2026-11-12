@@ -18,21 +18,16 @@
 * Also, this should only be called by `list_to_object` in persistence.dm - at least
 * with current plans - that way it can actually initialize the type from the list
 */
-/datum/proc/deserialize(var/list/data)
+/datum/proc/deserialize(list/data)
 	return
-
-/atom
-	// This var isn't actually used for anything, but is present so that
-	// DM's map reader doesn't forfeit on reading a JSON-serialized map
-	var/map_json_data
 
 // This is so specific atoms can override these, and ignore certain ones
 /atom/proc/vars_to_save()
- 	return list("color","dir","icon","icon_state","name","pixel_x","pixel_y")
+	return list("color","dir","icon","icon_state","name","pixel_x","pixel_y")
 
 /atom/proc/map_important_vars()
 	// A list of important things to save in the map editor
- 	return list("color","dir","icon","icon_state","layer","name","pixel_x","pixel_y")
+	return list("color","dir","icon","icon_state","layer","name","pixel_x","pixel_y")
 
 /area/map_important_vars()
 	// Keep the area default icons, to keep things nice and legible
@@ -50,7 +45,7 @@
 	return data
 
 
-/atom/deserialize(var/list/data)
+/atom/deserialize(list/data)
 	for(var/thing in vars_to_save())
 		if(thing in data)
 			vars[thing] = data[thing]
@@ -70,19 +65,27 @@ If you're clever, you can do neat things with SDQL and this, though be careful -
 some objects, like humans, are dependent that certain extra things are defined
 in their list
 */
-/proc/json_to_object(var/json_data, var/loc)
+/proc/json_to_object(json_data, loc)
 	var/data = json_decode(json_data)
 	return list_to_object(data, loc)
 
-/proc/list_to_object(var/list/data, var/loc)
+/proc/list_to_object(list/data, loc)
 	if(!islist(data))
 		throw EXCEPTION("You didn't give me a list, bucko")
 	if(!("type" in data))
 		throw EXCEPTION("No 'type' field in the data")
 	var/path = text2path(data["type"])
 	if(!path)
-		throw EXCEPTION("Path not found: [path]")
+		throw EXCEPTION("Path not found: [data["type"]]")
 
-	var/atom/movable/thing = new path(loc)
+	// Since Initialize() eats the first argument
+	// we need to pass loc twice for organs, otherwise
+	// they'll never attach to the mob. But if it's passed
+	// for everything, it'll break shit cause it gets passed random args.
+	var/atom/movable/thing
+	if(ispath(path, /obj/item/organ))
+		thing = new path(loc, loc)
+	else
+		thing = new path(loc)
 	thing.deserialize(data)
 	return thing

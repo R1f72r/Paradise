@@ -1,117 +1,58 @@
-///Adminfu
-//Help act:Heal/revie GP //p is for help
-//Disarm:Stun
-//Grab:Neck
-//Harm:Gib
-#define HEAL_COMBO "GP"
-
 /datum/martial_art/adminfu
 	name = "Way of the Dancing Admin"
-	help_verb = /mob/living/carbon/human/proc/adminfu_help
+	has_explaination_verb = TRUE
+	combos = list(/datum/martial_combo/healing_palm)
+	weight = 99999999 //Matt Malvor?
 
-/datum/martial_art/adminfu/proc/check_streak(var/mob/living/carbon/human/A, var/mob/living/carbon/human/D)
-	if(findtext(streak,HEAL_COMBO))
-		streak = ""
-		healPalm(A,D)
-		return 1
-	return 0
-
-/datum/martial_art/adminfu/harm_act(var/mob/living/carbon/human/A, var/mob/living/carbon/human/D)
-
+/datum/martial_art/adminfu/harm_act(mob/living/carbon/human/A, mob/living/carbon/human/D)
+	MARTIAL_ARTS_ACT_CHECK
 	if(!D.stat)//do not kill what is dead...
 		A.do_attack_animation(D)
-		D.visible_message("<span class='warning'>[A] manifests a large glowing toolbox and shoves it in [D]'s chest!</span>", \
-							"<spac class='userdanger'>[A] shoves a mystical toolbox in your chest!</span>")
+		D.visible_message(SPAN_WARNING("[A] manifests a large glowing toolbox and shoves it in [D]'s chest!"), \
+							SPAN_USERDANGER("[A] shoves a mystical toolbox in your chest!"))
 		D.death()
 
-		return 1
+		return TRUE
 
 
-/datum/martial_art/adminfu/disarm_act(var/mob/living/carbon/human/A, var/mob/living/carbon/human/D)
+/datum/martial_art/adminfu/disarm_act(mob/living/carbon/human/A, mob/living/carbon/human/D)
+	MARTIAL_ARTS_ACT_CHECK
 	A.do_attack_animation(D)
-	D.Weaken(25)
-	D.Stun(25)
-	return 1
+	D.Weaken(50 SECONDS, TRUE)
+	D.visible_message(
+		SPAN_WARNING("[A] pinches [D] in a flurry of places, rendering them helpless!"),
+		SPAN_USERDANGER("[A] pinches you at lightning speed! Your body gives out!")
+	)
+	return TRUE
 
-/datum/martial_art/adminfu/grab_act(var/mob/living/carbon/human/A, var/mob/living/carbon/human/D)
-	add_to_streak("G",D)
-	if(check_streak(A,D))
-		return 1
-	D.grabbedby(A,1)
-	var/obj/item/weapon/grab/G = A.get_active_hand()
+/datum/martial_art/adminfu/grab_act(mob/living/carbon/human/A, mob/living/carbon/human/D)
+	MARTIAL_ARTS_ACT_CHECK
+	var/obj/item/grab/G = D.grabbedby(A,1)
 	if(G)
 		G.state = GRAB_NECK
+	return TRUE
 
-/datum/martial_art/adminfu/help_act(var/mob/living/carbon/human/A, var/mob/living/carbon/human/D)
-	add_to_streak("P",D)
-	if(check_streak(A,D))
-		return 1
+/datum/martial_art/adminfu/explaination_header(user)
+	to_chat(user, "[SPAN_NOTICE("Grab")]: Automatic Neck Grab.")
+	to_chat(user, "[SPAN_NOTICE("Disarm")]: Stun/weaken")
+	to_chat(user, "[SPAN_NOTICE("Harm")]: Death.")
 
-/datum/martial_art/adminfu/proc/healPalm(var/mob/living/carbon/human/A, var/mob/living/carbon/human/D)
-	A.do_attack_animation(D)
-	D.visible_message("<span class='warning'>[A] smacks [D] in the forehead!</span>")
-
-		//its the staff of healing code..hush
-	if(istype(D,/mob))
-		var/old_stat = D.stat
-		if(isanimal(D) && D.stat == DEAD)
-			var/mob/living/simple_animal/O = D
-			var/mob/living/simple_animal/P = new O.type(O.loc)
-			P.real_name = O.real_name
-			P.name = O.name
-			if(iscorgi(O))
-				var/mob/living/simple_animal/pet/corgi/C = O
-				if(C.inventory_head)
-					C.inventory_head.loc = C.loc
-				if(C.inventory_back)
-					C.inventory_back.loc = C.loc
-			if(O.mind)
-				O.mind.transfer_to(P)
-			else
-				P.key = O.key
-			qdel(O)
-			D = P
-		else
-			D.revive()
-			D.suiciding = 0
-		if(!D.ckey)
-			for(var/mob/dead/observer/ghost in player_list)
-				if(D.real_name == ghost.real_name)
-					ghost.reenter_corpse()
-					break
-		if(old_stat != DEAD)
-			to_chat(D, "<span class='notice'>You feel great!</span>")
-		else
-			to_chat(D, "<span class='notice'>You rise with a start, you're alive!!!</span>")
-		return 1
-
-/mob/living/carbon/human/proc/adminfu_help()
-	set name = "Recall Teachings"
-	set desc = "Remember the way of the dancing admin."
-	set category = "Adminfu"
-
-	to_chat(usr, "<span class='notice'>Grab</span>: Automatic Neck Grab.")
-	to_chat(usr, "<span class='notice'>Disarm</span>: Stun/weaken")
-	to_chat(usr, "<span class='notice'>Harm</span>: Death.")
-	to_chat(usr, "<span class='notice'>Healing Palm:</span>:Combo:Grab,Help intent. Heals or revives a crature.")
-
-
-/obj/item/weapon/adminfu_scroll
+/obj/item/adminfu_scroll
 	name = "frayed scroll"
 	desc = "An aged and frayed scrap of paper written in shifting runes. There are hand-drawn illustrations of pugilism."
 	icon = 'icons/obj/wizard.dmi'
 	icon_state ="scroll2"
-	var/used = 0
+	new_attack_chain = TRUE
 
-/obj/item/weapon/adminfu_scroll/attack_self(mob/user as mob)
+/obj/item/adminfu_scroll/activate_self(mob/living/carbon/human/user)
 	if(!ishuman(user))
-		return
-	if(!used)
-		var/mob/living/carbon/human/H = user
-		var/datum/martial_art/adminfu/F = new/datum/martial_art/adminfu(null)
-		F.teach(H)
-		to_chat(H, "<span class='boldannounce'>You have learned the ancient martial art of the Admins.</span>")
-		used = 1
-		desc = "It's completely blank."
-		name = "empty scroll"
-		icon_state = "blankscroll"
+		return ..()
+
+	var/datum/martial_art/adminfu/F = new/datum/martial_art/adminfu(null)
+	F.teach(user)
+	to_chat(user, SPAN_BOLDANNOUNCEIC("You have learned the ancient martial art of the Admins."))
+	user.drop_item_to_ground(src, TRUE)
+	visible_message(SPAN_WARNING("You eat [src] to ensure that no-one else can access its power!"))
+	playsound(loc, 'sound/items/eatfood.ogg', 50, 0)
+	qdel(src)
+	return ITEM_INTERACT_COMPLETE

@@ -6,92 +6,106 @@
 // -------------: AI: after it kills you, it webs you and lays new terror eggs on your body
 // -------------: SPECIAL: can also create webs, web normal objects, etc
 // -------------: TO FIGHT IT: kill it however you like - just don't die to it!
-// -------------: SPRITES FROM: FoS, http://nanotrasen.se/phpBB3/memberlist.php?mode=viewprofile&u=386
+// -------------: SPRITES FROM: FoS, https://www.paradisestation.org/forum/profile/335-fos
 
 /mob/living/simple_animal/hostile/poison/terror_spider/green
 	name = "Green Terror spider"
 	desc = "An ominous-looking green spider. It has a small egg-sac attached to it, and dried blood stains on its carapace."
 	spider_role_summary = "Average melee spider that webs its victims and lays more spider eggs"
+	spider_intro_text = "As a Green Terror Spider, your role is to lay and protect spider eggs so they can hatch and mature into more spiders. \
+	You can lay a new set of eggs for every 2 corpses you web, so work with other spiders to collect as many bodies as you can. \
+	To aid with this you have moderate health and deal moderate damage, with your bite and webs blurring the vision of any victims."
 	ai_target_method = TS_DAMAGE_BRUTE
 	icon_state = "terror_green"
 	icon_living = "terror_green"
 	icon_dead = "terror_green_dead"
-	maxHealth = 120
-	health = 120
+	maxHealth = 150
+	health = 150
 	melee_damage_lower = 10
-	melee_damage_upper = 20
+	web_type = /obj/structure/spider/terrorweb/green
 	var/feedings_to_lay = 2
-	var/datum/action/innate/terrorspider/greeneggs/greeneggs_action
 
 
-/mob/living/simple_animal/hostile/poison/terror_spider/green/New()
-	..()
-	greeneggs_action = new()
-	greeneggs_action.Grant(src)
+/mob/living/simple_animal/hostile/poison/terror_spider/green/Initialize(mapload)
+	. = ..()
+	var/datum/action/innate/terrorspider/greeneggs/act = new
+	act.Grant(src)
 
 /mob/living/simple_animal/hostile/poison/terror_spider/green/proc/DoLayGreenEggs()
 	var/obj/structure/spider/eggcluster/E = locate() in get_turf(src)
 	if(E)
-		to_chat(src, "<span class='notice'>There is already a cluster of eggs here!</span>")
-	else if(fed < feedings_to_lay)
-		to_chat(src, "<span class='warning'>You must wrap more humanoid prey before you can do this!</span>")
+		to_chat(src, SPAN_NOTICE("There is already a cluster of eggs here!"))
+		return
+	if(fed < feedings_to_lay)
+		to_chat(src, SPAN_WARNING("You must wrap more humanoid prey before you can do this!"))
+		return
+	var/list/eggtypes = list(TS_DESC_RED, TS_DESC_GRAY, TS_DESC_GREEN)
+	var/list/spider_array = CountSpidersDetailed(FALSE)
+	if(spider_array[/mob/living/simple_animal/hostile/poison/terror_spider/brown] < 2)
+		eggtypes += TS_DESC_BROWN
+	if(spider_array[/mob/living/simple_animal/hostile/poison/terror_spider/black] < 2)
+		eggtypes += TS_DESC_BLACK
+	var/eggtype = pick(eggtypes)
+	if(client)
+		eggtype = tgui_input_list(src, "What kind of eggs?", "Egg Laying", eggtypes)
+		if(!(eggtype in eggtypes))
+			to_chat(src, SPAN_DANGER("Unrecognized egg type."))
+			return FALSE
+	if(!isturf(loc))
+		// This has to be checked after we ask the user what egg type. Otherwise they could trigger prompt THEN move into a vent.
+		to_chat(src, SPAN_DANGER("Eggs can only be laid while standing on a floor."))
+		return
+	if(fed < feedings_to_lay)
+		// We have to check this again after the popup, to account for people spam-clicking the button, then doing all the popups at once.
+		to_chat(src, SPAN_WARNING("You must wrap more humanoid prey before you can do this!"))
+		return
+	visible_message(SPAN_NOTICE("[src] lays a cluster of eggs."))
+	if(eggtype == TS_DESC_RED)
+		DoLayTerrorEggs(/mob/living/simple_animal/hostile/poison/terror_spider/red, 1)
+	else if(eggtype == TS_DESC_GRAY)
+		DoLayTerrorEggs(/mob/living/simple_animal/hostile/poison/terror_spider/gray, 1)
+	else if(eggtype == TS_DESC_GREEN)
+		DoLayTerrorEggs(/mob/living/simple_animal/hostile/poison/terror_spider/green, 1)
+	else if(eggtype == TS_DESC_BLACK)
+		DoLayTerrorEggs(/mob/living/simple_animal/hostile/poison/terror_spider/black, 1)
+	else if(eggtype == TS_DESC_BROWN)
+		DoLayTerrorEggs(/mob/living/simple_animal/hostile/poison/terror_spider/brown, 1)
 	else
-		visible_message("<span class='notice'>[src] begins to lay a cluster of eggs.</span>")
-		if(prob(33))
-			DoLayTerrorEggs(/mob/living/simple_animal/hostile/poison/terror_spider/red, 1, 1)
-		else if(prob(50))
-			DoLayTerrorEggs(/mob/living/simple_animal/hostile/poison/terror_spider/gray, 1, 1)
-		else
-			DoLayTerrorEggs(/mob/living/simple_animal/hostile/poison/terror_spider/green, 1, 1)
-		fed -= feedings_to_lay
+		to_chat(src, SPAN_WARNING("Unrecognized egg type!"))
+		fed += feedings_to_lay
+	fed -= feedings_to_lay
 
 /mob/living/simple_animal/hostile/poison/terror_spider/green/spider_special_action()
 	if(cocoon_target)
-		if(get_dist(src, cocoon_target) <= 1)
-			spider_steps_taken = 0
-			DoWrap()
-		else
-			if(spider_steps_taken > spider_max_steps)
-				spider_steps_taken = 0
-				cocoon_target = null
-				busy = 0
-				stop_automated_movement = 0
-			else
-				spider_steps_taken++
-				CreatePath(cocoon_target)
-				step_to(src,cocoon_target)
-				if(spider_debug)
-					visible_message("<span class='notice'>[src] moves towards [cocoon_target] to cocoon it.</span>")
+		handle_cocoon_target()
 	else if(fed >= feedings_to_lay)
 		DoLayGreenEggs()
 	else if(world.time > (last_cocoon_object + freq_cocoon_object))
-		last_cocoon_object = world.time
-		var/list/can_see = view(src, 10)
-		for(var/mob/living/C in can_see)
-			if(C.stat == DEAD && !isterrorspider(C) && !C.anchored)
-				spider_steps_taken = 0
-				cocoon_target = C
-				return
-		for(var/obj/O in can_see)
-			if(O.anchored)
-				continue
-			if(istype(O, /obj/item) || istype(O, /obj/structure) || istype(O, /obj/machinery))
-				if(!istype(O, /obj/item/weapon/paper))
-					cocoon_target = O
-					stop_automated_movement = 1
-					spider_steps_taken = 0
-					return
+		seek_cocoon_target()
 
 /mob/living/simple_animal/hostile/poison/terror_spider/green/spider_specialattack(mob/living/carbon/human/L, poisonable)
 	if(!poisonable)
 		..()
 		return
 	var/inject_target = pick("chest","head")
-	if(L.stunned || L.can_inject(null,0,inject_target,0))
-		if(L.eye_blurry < 60)
-			L.AdjustEyeBlurry(10)
+	if(!L.attack_animal(src))
+		return
+	if(L.IsStunned() || L.can_inject(null, FALSE, inject_target, FALSE))
+		L.AdjustEyeBlurry(20 SECONDS, 0, 120 SECONDS)
 		// instead of having a venom that only lasts seconds, we just add the eyeblur directly.
-		visible_message("<span class='danger'>[src] buries its fangs deep into the [inject_target] of [target]!</span>")
+		visible_message(SPAN_DANGER("[src] buries its fangs deep into the [inject_target] of [target]!"))
 	else
-		visible_message("<span class='danger'>[src] bites [target], but cannot inject venom into their [inject_target]!</span>")
-	L.attack_animal(src)
+		visible_message(SPAN_DANGER("[src] bites [target], but cannot inject venom into [target.p_their()] [inject_target]!"))
+
+/mob/living/simple_animal/hostile/poison/terror_spider/green/event_cost()
+	if(is_station_level((get_turf(src)).z) && stat != DEAD)
+		return list(ASSIGNMENT_SECURITY = 0.5, ASSIGNMENT_CREW = 2, ASSIGNMENT_MEDICAL = 0.2)
+
+/obj/structure/spider/terrorweb/green
+	name = "slimy web"
+	desc = "This web is partly composed of strands of green slime."
+
+/obj/structure/spider/terrorweb/green/web_special_ability(mob/living/carbon/C)
+	if(istype(C))
+		C.AdjustEyeBlurry(60 SECONDS, 0, 120 SECONDS)
+

@@ -1,26 +1,37 @@
-/area/ai_monitored
+/area/station/ai_monitored
 	name = "AI Monitored Area"
-	var/obj/machinery/camera/motioncamera = null
+	var/list/motioncameras = list()
+	var/list/motionTargets = list()
+	sound_environment = SOUND_ENVIRONMENT_ROOM
 
-
-/area/ai_monitored/New()
-	..()
-	// locate and store the motioncamera
-	spawn (20) // spawn on a delay to let turfs/objs load
+/area/station/ai_monitored/Initialize(mapload)
+	. = ..()
+	if(mapload)
 		for(var/obj/machinery/camera/M in src)
 			if(M.isMotion())
-				motioncamera = M
-				M.area_motion = src
-				return
-	return
+				motioncameras.Add(M)
+				M.set_area_motion(src)
 
-/area/ai_monitored/Entered(atom/movable/O)
+/area/station/ai_monitored/Entered(atom/movable/O)
 	..()
-	if(ismob(O) && motioncamera)
-		motioncamera.newTarget(O)
+	if(ismob(O) && length(motioncameras))
+		for(var/X in motioncameras)
+			var/obj/machinery/camera/cam = X
+			cam.newTarget(O)
+			return
 
-/area/ai_monitored/Exited(atom/movable/O)
-	if(ismob(O) && motioncamera)
-		motioncamera.lostTarget(O)
+/area/station/ai_monitored/Exited(atom/movable/O, direction)
+	..()
+	if(ismob(O) && length(motioncameras))
+		for(var/X in motioncameras)
+			var/obj/machinery/camera/cam = X
+			cam.lostTargetRef(O.UID())
+			return
 
-
+/area/station/ai_monitored/storage/eva
+	name = "EVA Storage"
+	icon_state = "eva"
+	area_icon_text = "EVA"
+	area_icon_color = AREA_COLOR_COMMAND
+	ambientsounds = HIGHSEC_SOUNDS
+	request_console_name = "EVA"

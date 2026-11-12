@@ -1,49 +1,45 @@
 /obj/machinery/computer/aifixer
 	name = "\improper AI system integrity restorer"
-	icon = 'icons/obj/computer.dmi'
 	icon_keyboard = "rd_key"
 	icon_screen = "ai-fixer"
-	circuit = /obj/item/weapon/circuitboard/aifixer
-	req_access = list(access_captain, access_robotics, access_heads)
+	circuit = /obj/item/circuitboard/aifixer
+	req_access = list(ACCESS_CAPTAIN, ACCESS_ROBOTICS, ACCESS_HEADS)
 	var/mob/living/silicon/ai/occupant = null
-	var/active = 0
+	var/active = FALSE
 
 	light_color = LIGHT_COLOR_PURPLE
 
-/obj/machinery/computer/aifixer/attackby(I as obj, user as mob, params)
-	if(occupant && istype(I, /obj/item/weapon/screwdriver))
+/obj/machinery/computer/aifixer/screwdriver_act(mob/user, obj/item/I)
+	if(occupant)
 		if(stat & BROKEN)
-			..()
+			return ..()
 		if(stat & NOPOWER)
-			to_chat(user, "<span class='warning'>The screws on [name]'s screen won't budge.</span>")
+			to_chat(user, SPAN_WARNING("The screws on [name]'s screen won't budge."))
 		else
-			to_chat(user, "<span class='warning'>The screws on [name]'s screen won't budge and it emits a warning beep!.</span>")
+			to_chat(user, SPAN_WARNING("The screws on [name]'s screen won't budge and it emits a warning beep!."))
+		return TRUE
 	else
-		..()
+		return ..()
 
-/obj/machinery/computer/aifixer/attack_ai(var/mob/user as mob)
+/obj/machinery/computer/aifixer/attack_ai(mob/user as mob)
 	ui_interact(user)
 
-/obj/machinery/computer/aifixer/attack_hand(var/mob/user as mob)
-	var/datum/game_mode/nations/mode = get_nations_mode()
-	if(!mode)
-		ui_interact(user)
-	else
-		if(mode.kickoff)
-			to_chat(user, "<span class='warning'>You have been locked out from this console!</span>")
+/obj/machinery/computer/aifixer/attack_hand(mob/user as mob)
+	ui_interact(user)
 
-/obj/machinery/computer/aifixer/ui_interact(mob/user, ui_key = "main", var/datum/nanoui/ui = null, var/force_open = 1)
-	ui = nanomanager.try_update_ui(user, src, ui_key, ui, force_open)
+/obj/machinery/computer/aifixer/ui_state(mob/user)
+	return GLOB.default_state
 
+/obj/machinery/computer/aifixer/ui_interact(mob/user, datum/tgui/ui = null)
+	ui = SStgui.try_update_ui(user, src, ui)
 	if(!ui)
-		ui = new(user, src, ui_key, "ai_fixer.tmpl", "AI System Integrity Restorer", 550, 500)
+		ui = new(user, src, "AIFixer", name)
 		ui.open()
-		ui.set_auto_update(1)
 
-/obj/machinery/computer/aifixer/ui_data(mob/user, datum/topic_state/state)
+/obj/machinery/computer/aifixer/ui_data(mob/user)
 	var/data[0]
+	data["occupant"] = (occupant ? occupant.name : null) // a null occupant isn't passed on if this is below the if.
 	if(occupant)
-		data["occupant"] = occupant.name
 		data["reference"] = "\ref[occupant]"
 		data["integrity"] = (occupant.health+100)/2
 		data["stat"] = occupant.stat
@@ -53,91 +49,96 @@
 
 		var/laws[0]
 		for(var/datum/ai_law/law in occupant.laws.all_laws())
-			laws.Add(list(list("law" = law.law, "number" = law.get_index())))
-
+			if(law in occupant.laws.ion_laws) // If we're an ion law, give it an ion index code
+				laws.Add(ionnum() + ". " + law.law)
+			else
+				laws.Add(num2text(law.get_index()) + ". " + law.law)
 		data["laws"] = laws
+		data["has_laws"] = length(laws)
 
 	return data
 
-/obj/machinery/computer/aifixer/Topic(href, href_list)
+/obj/machinery/computer/aifixer/ui_act(action, params)
 	if(..())
-		return 1
-
-	if(href_list["fix"])
-		src.active = 1
-		while(src.occupant.health < 100)
-			src.occupant.adjustOxyLoss(-1)
-			src.occupant.adjustFireLoss(-1)
-			src.occupant.adjustToxLoss(-1)
-			src.occupant.adjustBruteLoss(-1)
-			src.occupant.updatehealth()
-			if(src.occupant.health >= 0 && src.occupant.stat == 2)
-				src.occupant.stat = 0
-				src.occupant.lying = 0
-				dead_mob_list -= src.occupant
-				living_mob_list += src.occupant
-			sleep(10)
-		src.active = 0
-		src.add_fingerprint(usr)
-
-	if(href_list["wireless"])
-		var/wireless = text2num(href_list["wireless"])
-		if(wireless == 0 || wireless == 1)
-			occupant.control_disabled = wireless
-
-	if(href_list["radio"])
-		var/radio = text2num(href_list["radio"])
-		if(radio == 0 || radio == 1)
-			occupant.aiRadio.disabledAi = radio
-
-	nanomanager.update_uis(src)
-	update_icon()
-	return
-
-/obj/machinery/computer/aifixer/update_icon()
-	..()
-	if(stat & (NOPOWER|BROKEN))
 		return
-	else
-		var/overlay_layer = LIGHTING_LAYER+0.2 // +0.1 from the default computer overlays
-		if(active)
-			overlays += image(icon,"ai-fixer-on",overlay_layer)
-		if(occupant)
-			switch(occupant.stat)
-				if(0)
-					overlays += image(icon,"ai-fixer-full",overlay_layer)
-				if(2)
-					overlays += image(icon,"ai-fixer-404",overlay_layer)
-		else
-			overlays += image(icon,"ai-fixer-empty",overlay_layer)
+	switch(action)
+		if("fix")
+			if(occupant.suiciding)
+				to_chat(usr, SPAN_WARNING("Memory corruption detected in recovery partition, likely due to a sudden self-induced shutdown. AI is unrecoverable."))
+				return
+			if(active) // Prevent from starting a fix while fixing.
+				to_chat(usr, SPAN_WARNING("You are already fixing this AI!"))
+				return
+			active = TRUE
+			INVOKE_ASYNC(src, PROC_REF(fix_ai))
+			add_fingerprint(usr)
 
-/obj/machinery/computer/aifixer/transfer_ai(var/interaction, var/mob/user, var/mob/living/silicon/ai/AI, var/obj/item/device/aicard/card)
+		if("wireless")
+			occupant.control_disabled = !occupant.control_disabled
+
+		if("radio")
+			occupant.aiRadio.disabledAi = !occupant.aiRadio.disabledAi
+
+	update_icon(UPDATE_OVERLAYS)
+	return TRUE
+
+/obj/machinery/computer/aifixer/proc/fix_ai() // Can we fix it? Probrably.
+	while(occupant.health < 100 || occupant.stat == DEAD)
+		occupant.adjustOxyLoss(-1, FALSE)
+		occupant.adjustFireLoss(-1, FALSE)
+		occupant.adjustToxLoss(-1, FALSE)
+		occupant.adjustBruteLoss(-1, FALSE)
+		occupant.updatehealth()
+		if(occupant.health >= 0 && occupant.stat == DEAD)
+			occupant.update_revive()
+			update_icon(UPDATE_OVERLAYS)
+		sleep(10)
+	active = FALSE
+
+/obj/machinery/computer/aifixer/update_overlays()
+	. = ..()
+	if(stat & (BROKEN|NOPOWER))
+		return
+	if(active)
+		. += "ai-fixer-on"
+	if(occupant)
+		switch(occupant.stat)
+			if(0)
+				. += "ai-fixer-full"
+			if(2)
+				. += "ai-fixer-404"
+	else
+		. += "ai-fixer-empty"
+
+/obj/machinery/computer/aifixer/transfer_ai(interaction, mob/user, mob/living/silicon/ai/AI, obj/item/aicard/card)
 	if(!..())
 		return
-	//Downloading AI from card to terminal.
+	// Downloading AI from card to terminal.
 	if(interaction == AI_TRANS_FROM_CARD)
 		if(stat & (NOPOWER|BROKEN))
-			to_chat(user, "[src] is offline and cannot take an AI at this time!")
+			to_chat(user, SPAN_WARNING("[src] is offline and cannot take an AI at this time!"))
 			return
-		AI.loc = src
+		AI.forceMove(src)
 		occupant = AI
-		AI.control_disabled = 1
-		AI.aiRadio.disabledAi = 1
+		AI.control_disabled = TRUE
+		AI.aiRadio.disabledAi = TRUE
 		to_chat(AI, "You have been uploaded to a stationary terminal. Sadly, there is no remote access from here.")
-		to_chat(user, "<span class='boldnotice'>Transfer successful</span>: [AI.name] ([rand(1000,9999)].exe) installed and executed successfully. Local copy has been removed.")
-		update_icon()
+		to_chat(user, "[SPAN_BOLDNOTICE("Transfer successful")]: [AI.name] ([rand(1000,9999)].exe) installed and executed successfully. Local copy has been removed.")
+		update_icon(UPDATE_OVERLAYS)
+		card.held_ai = null
 
-	else //Uploading AI from terminal to card
+	else // Uploading AI from terminal to card.
 		if(occupant && !active)
-			to_chat(occupant, "You have been downloaded to a mobile storage device. Still no remote access.")
-			to_chat(user, "<span class='boldnotice'>Transfer successful</span>: [occupant.name] ([rand(1000,9999)].exe) removed from host terminal and stored within local memory.")
-			occupant.loc = card
+			to_chat(occupant, "[SPAN_BOLDNOTICE("You have been downloaded to a mobile storage device.")] [SPAN_DANGER("Still no remote access.")]")
+			to_chat(user, "[SPAN_BOLDNOTICE("Transfer successful")]: [occupant.name] ([rand(1000,9999)].exe) removed from host terminal and stored within local memory.")
+			occupant.forceMove(card)
+			card.held_ai = occupant
 			occupant = null
-			update_icon()
+			update_icon(UPDATE_OVERLAYS)
 		else if(active)
-			to_chat(user, "<span class='boldannounce'>ERROR</span>: Reconstruction in progress.")
+			to_chat(user, "[SPAN_BOLDANNOUNCEIC("ERROR")]: Reconstruction in progress.")
 		else if(!occupant)
-			to_chat(user, "<span class='boldannounce'>ERROR</span>: Unable to locate artificial intelligence.")
+			to_chat(user, "[SPAN_BOLDANNOUNCEIC("ERROR")]: Unable to locate artificial intelligence.")
 
 /obj/machinery/computer/aifixer/Destroy()
 	if(occupant)

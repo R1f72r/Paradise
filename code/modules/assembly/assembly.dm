@@ -1,200 +1,168 @@
-/obj/item/device/assembly
+/obj/item/assembly
 	name = "assembly"
 	desc = "A small electronic device that should never exist."
 	icon = 'icons/obj/assemblies/new_assemblies.dmi'
 	icon_state = ""
 	flags = CONDUCT
 	w_class = WEIGHT_CLASS_SMALL
-	materials = list(MAT_METAL=100)
+	materials = list(MAT_METAL = 100)
 	throwforce = 2
 	throw_speed = 3
 	throw_range = 10
 	origin_tech = "magnets=1;engineering=1"
-	toolspeed = 1
-	usesound = 'sound/items/Deconstruct.ogg'
+	usesound = 'sound/items/deconstruct.ogg'
+	drop_sound = 'sound/items/handling/component_drop.ogg'
+	pickup_sound =  'sound/items/handling/component_pickup.ogg'
+	new_attack_chain = TRUE
 
 	var/bomb_name = "bomb" // used for naming bombs / mines
 
-	var/secured = 1
+	var/secured = TRUE
 	var/list/attached_overlays = null
-	var/obj/item/device/assembly_holder/holder = null
-	var/cooldown = 0//To prevent spam
-	var/wires = WIRE_RECEIVE | WIRE_PULSE
+	var/obj/item/assembly_holder/holder = null
+	var/cooldown = 0 //To prevent spam
+	var/wires = ASSEMBLY_WIRE_RECEIVE | ASSEMBLY_WIRE_PULSE
 	var/datum/wires/connected = null // currently only used by timer/signaler
 
-	var/const/WIRE_RECEIVE = 1			//Allows Pulsed(0) to call Activate()
-	var/const/WIRE_PULSE = 2				//Allows Pulse(0) to act on the holder
-	var/const/WIRE_PULSE_SPECIAL = 4		//Allows Pulse(0) to act on the holders special assembly
-	var/const/WIRE_RADIO_RECEIVE = 8		//Allows Pulsed(1) to call Activate()
-	var/const/WIRE_RADIO_PULSE = 16		//Allows Pulse(1) to send a radio message
+/obj/item/assembly/Initialize(mapload)
+	. = ..()
+	var/static/list/loc_connections = list(
+		COMSIG_ATOM_ENTERED = PROC_REF(on_atom_entered)
+	)
+	AddElement(/datum/element/connect_loc, loc_connections)
 
-	proc/activate()									//What the device does when turned on
-		return
+/// Called when the holder is moved
+/obj/item/assembly/proc/holder_movement()
+	return
 
-	proc/pulsed(var/radio = 0)						//Called when another assembly acts on this one, var/radio will determine where it came from for wire calcs
-		return
+/// Called when activate_self is called
+/obj/item/assembly/interact(mob/user)
+	add_fingerprint(user)
+	return
 
-	proc/pulse(var/radio = 0)						//Called when this device attempts to act on another device, var/radio determines if it was sent via radio or direct
-		return
+/obj/item/assembly/proc/on_atom_entered(datum/source, atom/movable/entered)
+	return
 
-	proc/toggle_secure()								//Code that has to happen when the assembly is un\secured goes here
-		return
+/// Called to constantly step down the countdown/cooldown
+/obj/item/assembly/proc/process_cooldown()
+	cooldown--
+	if(cooldown <= 0)
+		return FALSE
+	addtimer(CALLBACK(src, PROC_REF(process_cooldown)), 10)
+	return TRUE
 
-	proc/attach_assembly(var/obj/A, var/mob/user)	//Called when an assembly is attacked by another
-		return
+/obj/item/assembly/Destroy()
+	if(istype(loc, /obj/item/assembly_holder) || istype(holder))
+		var/obj/item/assembly_holder/A = loc
+		if(A.a_left == src)
+			A.a_left = null
+		else if(A.a_right == src)
+			A.a_right = null
+		holder = null
+	return ..()
 
-	proc/process_cooldown()							//Called via spawn(10) to have it count down the cooldown var
-		return
+/// Called when another assembly acts on this one, var/radio will determine where it came from for wire calcs
+/obj/item/assembly/proc/pulsed(radio = FALSE)
+	if(holder && (wires & ASSEMBLY_WIRE_RECEIVE))
+		activate(radio)
+	if(radio && (wires & ASSEMBLY_WIRE_RADIO_RECEIVE))
+		activate(radio)
+	return TRUE
 
-	proc/holder_movement()							//Called when the holder is moved
-		return
+/// Called when this device attempts to act on another device, var/radio determines if it was sent via radio or direct
+/obj/item/assembly/proc/pulse(radio = FALSE)
+	if(connected && wires)
+		connected.pulse_assembly(src)
+		return TRUE
+	if(holder && (wires & ASSEMBLY_WIRE_PULSE))
+		holder.process_activation(src, 1, 0)
+	if(holder && (wires & ASSEMBLY_WIRE_PULSE_SPECIAL))
+		holder.process_activation(src, 0, 1)
+	if(istype(loc, /obj/item/grenade)) // This is a hack.  Todo: Manage this better -Sayu
+		var/obj/item/grenade/G = loc
+		G.prime()                // Adios, muchachos
+	SEND_SIGNAL(src, COMSIG_ASSEMBLY_PULSED, radio)
+	return TRUE
 
-	proc/describe()                  // Called by grenades to describe the state of the trigger (time left, etc)
-		return "The trigger assembly looks broken!"
+/// What the device does when turned on
+/obj/item/assembly/proc/activate(radio = FALSE)
+	SHOULD_CALL_PARENT(TRUE)
+	if(!secured || cooldown > 0)
+		return FALSE
+	cooldown = 2
+	addtimer(CALLBACK(src, PROC_REF(process_cooldown)), 1 SECONDS)
 
+	return TRUE
 
-	interact(mob/user as mob)					//Called when attack_self is called
-		return
+/// Happens when the assembly is (un)secured
+/obj/item/assembly/proc/toggle_secure()
+	secured = !secured
+	update_icon()
+	return secured
 
-	process_cooldown()
-		cooldown--
-		if(cooldown <= 0)	return 0
-		spawn(10)
-			process_cooldown()
-		return 1
+/**
+ * on_attach: Called when attached to a holder, wiring datum, or other special assembly
+ *
+ * Will also be called if the assembly holder is attached to a plasma (internals) tank or welding fuel (dispenser) tank.
+ */
+/obj/item/assembly/proc/on_attach()
+	SHOULD_CALL_PARENT(TRUE)
 
-	Destroy()
-		if(istype(src.loc, /obj/item/device/assembly_holder) || istype(holder))
-			var/obj/item/device/assembly_holder/A = src.loc
-			if(A.a_left == src)
-				A.a_left = null
-			else if(A.a_right == src)
-				A.a_right = null
-			src.holder = null
+	if(!holder && connected)
+		holder = connected.holder
+
+/**
+ * on_detach: Called when removed from an assembly holder or wiring datum
+ */
+/obj/item/assembly/proc/on_detach()
+	if(connected)
+		connected = null
+	if(!holder)
+		return FALSE
+	forceMove(holder.drop_location())
+	holder = null
+	return TRUE
+
+/// Called when an assembly is attacked by another
+/obj/item/assembly/proc/attach_assembly(obj/item/assembly/A, mob/user)
+	holder = new /obj/item/assembly_holder(get_turf(src))
+	if(holder.attach(A, src, user))
+		to_chat(user, SPAN_NOTICE("You attach [A] to [src]!"))
+		user.put_in_active_hand(holder)
+		return TRUE
+	return FALSE
+
+/obj/item/assembly/item_interaction(mob/living/user, obj/item/used, list/modifiers)
+	if(!isassembly(used))
 		return ..()
+	var/obj/item/assembly/A = used
+	if(!A.secured && !secured)
+		attach_assembly(A, user)
+	return ITEM_INTERACT_COMPLETE
 
-	pulsed(var/radio = 0)
-		if(holder && (wires & WIRE_RECEIVE))
-			activate()
-		if(radio && (wires & WIRE_RADIO_RECEIVE))
-			activate()
-		return 1
-
-
-	pulse(var/radio = 0)
-		if(holder && (wires & WIRE_PULSE))
-			holder.process_activation(src, 1, 0)
-		if(holder && (wires & WIRE_PULSE_SPECIAL))
-			holder.process_activation(src, 0, 1)
-//		if(connected && (wires & WIRE_PULSE))
-//			connected.Pulse(src)
-//		if(radio && (wires & WIRE_RADIO_PULSE))
-			//Not sure what goes here quite yet send signal?
-
-		if(istype(loc,/obj/item/weapon/grenade)) // This is a hack.  Todo: Manage this better -Sayu
-			var/obj/item/weapon/grenade/G = loc
-			G.prime()                // Adios, muchachos
-
-
-		return 1
-
-
-	activate()
-		if(!secured || (cooldown > 0))	return 0
-		cooldown = 2
-		spawn(10)
-			process_cooldown()
-		return 1
-
-
-	toggle_secure()
-		secured = !secured
-		update_icon()
-		return secured
-
-
-	attach_assembly(var/obj/item/device/assembly/A, var/mob/user)
-		holder = new/obj/item/device/assembly_holder(get_turf(src))
-		if(holder.attach(A,src,user))
-			to_chat(user, "<span class='notice'>You attach \the [A] to \the [src]!</span>")
-			return 1
-		return 0
-
-
-	attackby(obj/item/weapon/W as obj, mob/user as mob, params)
-		if(isassembly(W))
-			var/obj/item/device/assembly/A = W
-			if((!A.secured) && (!secured))
-				attach_assembly(A,user)
-				return
-		if(istype(W, /obj/item/weapon/screwdriver))
-			if(toggle_secure())
-				to_chat(user, "<span class='notice'>\The [src] is ready!</span>")
-			else
-				to_chat(user, "<span class='notice'>\The [src] can now be attached!</span>")
-			return
-		..()
+/obj/item/assembly/screwdriver_act(mob/user, obj/item/I)
+	. = TRUE
+	if(!I.use_tool(src, user, 0, volume = I.tool_volume))
 		return
+	if(toggle_secure())
+		to_chat(user, SPAN_NOTICE("You ready and secure [src]!"))
+	else
+		to_chat(user, SPAN_NOTICE("You unsecure [src] with [I] so it can be attached!"))
 
+/obj/item/assembly/process()
+	STOP_PROCESSING(SSobj, src)
 
-	process()
-		processing_objects.Remove(src)
-		return
+/obj/item/assembly/examine(mob/user)
+	. = ..()
+	if(in_range(src, user) || loc == user)
+		if(secured)
+			. += "[src] is ready and secured!"
+		else
+			. += "[src] unsecured and can be attached!"
 
-
-	examine(mob/user)
-		..(user)
-		if((in_range(src, user) || loc == user))
-			if(secured)
-				to_chat(user, "\The [src] is ready!")
-			else
-				to_chat(user, "\The [src] can be attached!")
-
-
-	attack_self(mob/user as mob)
-		if(!user)	return 0
-		user.set_machine(src)
-		interact(user)
-		return 1
-
-
-	interact(mob/user as mob)
-		return //HTML MENU FOR WIRES GOES HERE
-
-/*
-	var/small_icon_state = null//If this obj will go inside the assembly use this for icons
-	var/list/small_icon_state_overlays = null//Same here
-	var/obj/holder = null
-	var/cooldown = 0//To prevent spam
-
-	proc
-		Activate()//Called when this assembly is pulsed by another one
-		Process_cooldown()//Call this via spawn(10) to have it count down the cooldown var
-		Attach_Holder(var/obj/H, var/mob/user)//Called when an assembly holder attempts to attach, sets src's loc in here
-
-
-	Activate()
-		if(cooldown > 0)
-			return 0
-		cooldown = 2
-		spawn(10)
-			Process_cooldown()
-		//Rest of code here
-		return 0
-
-
-	Process_cooldown()
-		cooldown--
-		if(cooldown <= 0)	return 0
-		spawn(10)
-			Process_cooldown()
-		return 1
-
-
-	Attach_Holder(var/obj/H, var/mob/user)
-		if(!H)	return 0
-		if(!H.IsAssemblyHolder())	return 0
-		//Remember to have it set its loc somewhere in here
-
-
-*/
+/obj/item/assembly/activate_self(mob/user)
+	if(!user)
+		return ..()
+	user.set_machine(src)
+	interact(user)
+	return ITEM_INTERACT_COMPLETE

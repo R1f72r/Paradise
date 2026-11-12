@@ -28,7 +28,7 @@
 	set_occupied(FALSE)
 	if(parent)
 		parent.children -= src
-	QDEL_LIST(children)
+	QDEL_LIST_CONTENTS(children)
 	parent = null
 	. = ..()
 
@@ -93,13 +93,6 @@
 
 /datum/space_chunk/proc/return_turfs()
 	return
-
-/datum/space_chunk/proc/search_chunk(object_list)
-	var/list/located = list()
-	for(var/atom/object in object_list)
-		if(((object.x >= x) && (object.x <= (x + width))) && ((object.y >= y) && (object.y <= (y + height))) && (object.z == zpos))
-			located.Add(object)
-	return located
 
 #undef BOTTOM_LEFT_CHUNK
 #undef BOTTOM_RIGHT_CHUNK

@@ -1,35 +1,75 @@
-#define ORDER_SCREEN_WIDTH 625 //width of order computer interaction window
-#define ORDER_SCREEN_HEIGHT 580 //height of order computer interaction window
-#define SUPPLY_SCREEN_WIDTH 625 //width of supply computer interaction window
-#define SUPPLY_SCREEN_HEIGHT 620 //height of supply computer interaction window
+#define MAX_CRATE_DELIVERY 40
 
-/obj/item/weapon/paper/manifest
-	name = "supply manifest"
-	var/erroneous = 0
-	var/points = 0
-	var/ordernumber = 0
+#define CARGO_OK 0
+#define CARGO_PREVENT_SHUTTLE 1
+#define CARGO_SKIP_ATOM 2
+#define CARGO_REQUIRE_PRIORITY 3
+#define CARGO_HAS_PRIORITY 4
+
 
 /obj/docking_port/mobile/supply
 	name = "supply shuttle"
 	id = "supply"
-	callTime = 1200
-
-	dir = 8
-	travelDir = 90
+	callTime = 2 MINUTES
+	dir = WEST
 	width = 12
 	dwidth = 5
 	height = 7
-	roundstart_move = "supply_away"
+	port_direction = EAST
+
+	// The list of things that can't be sent to CC.
+	var/list/blacklist = list(
+		"living creatures" = list(
+			/mob/living,
+			/obj/structure/blob,
+			/mob/living/basic/spiderling,
+			/obj/machinery/clonepod,
+			/obj/item/paicard),
+		"classified nuclear weaponry" = list(
+			/obj/item/disk/nuclear,
+			/obj/machinery/nuclearbomb),
+		"homing beacons" = list(
+			/obj/item/beacon,
+			/obj/machinery/quantumpad,
+			/obj/machinery/teleport/station,
+			/obj/machinery/teleport/hub,
+			/obj/machinery/telepad,
+			/obj/machinery/telepad_cargo,
+			/obj/structure/extraction_point),
+		"high-energy objects" = list(
+			/obj/singularity,
+			/obj/machinery/the_singularitygen,
+			/obj/effect/hierophant,
+			/obj/item/warp_cube),
+		"undelivered mail" = list(/obj/item/envelope),
+		"live ordnance" = list(/obj/machinery/syndicatebomb)
+		)
+
+	// The current manifest of what's on the shuttle.
+	var/datum/economy/cargo_shuttle_manifest/manifest = new
+
+	// The auto-registered simple_seller instances.
+	var/list/simple_sellers = list()
+
+	// The item preventing this shuttle from going to CC.
+	var/blocking_item = "ERR_UNKNOWN"
+
+/obj/docking_port/mobile/supply/Initialize(mapload)
+	. = ..()
+	for(var/T in subtypesof(/datum/economy/simple_seller))
+		var/datum/economy/simple_seller/seller = new T
+		simple_sellers += seller
+		seller.register(src)
 
 /obj/docking_port/mobile/supply/register()
 	if(!..())
-		return 0
-	shuttle_master.supply = src
-	return 1
+		return FALSE
+	SSshuttle.supply = src
+	return TRUE
 
 /obj/docking_port/mobile/supply/canMove()
 	if(is_station_level(z))
-		return forbidden_atoms_check(areaInstance)
+		return scan_cargo()
 	return ..()
 
 /obj/docking_port/mobile/supply/request(obj/docking_port/stationary/S)
@@ -37,19 +77,29 @@
 		return 2
 	return ..()
 
-/obj/docking_port/mobile/supply/dock()
+/obj/docking_port/mobile/supply/dock(obj/docking_port/stationary/port, force=FALSE, transit=FALSE)
 	. = ..()
-	if(.)	return .
+	if(.)
+		return
 
-	buy()
-	sell()
+	if(istype(port, /obj/docking_port/stationary/transit))
+		// Ignore transit ports.
+		return
+
+	if(is_station_level(port.z))
+		// Buy when arriving at the station.
+		buy()
+
+	if(port.z == level_name_to_num(CENTCOMM))
+		// Sell when arriving at CentComm.
+		sell()
 
 /obj/docking_port/mobile/supply/proc/buy()
-	if(!is_station_level(z))		//we only buy when we are -at- the station
-		return 1
-
-	if(!shuttle_master.shoppinglist.len)
-		return 2
+	for(var/datum/supply_order/order as anything in SSeconomy.shopping_list)
+		if(length(SSeconomy.delivery_list) >= MAX_CRATE_DELIVERY)
+			break
+		SSeconomy.delivery_list += order
+		SSeconomy.shopping_list -= order
 
 	var/list/emptyTurfs = list()
 	for(var/turf/simulated/T in areaInstance)
@@ -58,12 +108,10 @@
 
 		var/contcount
 		for(var/atom/A in T.contents)
-			if(istype(A,/atom/movable/lighting_overlay))
-				continue
-			if(istype(A,/obj/machinery/light))
-				continue //hacky but whatever, shuttles need three spots each for this shit
 			if(!A.simulated)
 				continue
+			if(istype(A, /obj/machinery/light) || istype(A, /obj/machinery/conveyor))
+				continue // Objects we're fine with spawning crates on.
 			contcount++
 
 		if(contcount)
@@ -71,718 +119,780 @@
 
 		emptyTurfs += T
 
-	for(var/datum/supply_order/SO in shuttle_master.shoppinglist)
+	for(var/datum/supply_order/SO in SSeconomy.delivery_list)
 		if(!SO.object)
 			throw EXCEPTION("Supply Order [SO] has no object associated with it.")
 			continue
 
 		var/turf/T = pick_n_take(emptyTurfs)		//turf we will place it in
 		if(!T)
-			shuttle_master.shoppinglist.Cut(1, shuttle_master.shoppinglist.Find(SO))
+			SSeconomy.delivery_list.Cut(1, SSeconomy.delivery_list.Find(SO))
 			return
+		SO.createObject(T)
 
-		var/errors = 0
-		if(prob(5))
-			errors |= MANIFEST_ERROR_COUNT
-		if(prob(5))
-			errors |= MANIFEST_ERROR_NAME
-		if(prob(5))
-			errors |= MANIFEST_ERROR_ITEM
-		SO.createObject(T, errors)
+	SSeconomy.delivery_list.Cut()
 
-	shuttle_master.shoppinglist.Cut()
+	for(var/datum/station_goal/secondary/SG in SSticker.mode.secondary_goals)
+		if(!SG.should_send_crate)
+			continue
+
+		var/turf/T = pick_n_take(emptyTurfs)		//turf we will place it in
+		if(!T)
+			break
+
+		var/obj/structure/closet/crate/secure/personal/PC = new(T)
+		PC.name = "goal crate"
+		PC.registered_name = SG.requester_name
+		PC.AddComponent(/datum/component/label/goal, SG.requester_name, SG.department, TRUE)
+		PC.locked = FALSE
+		PC.update_icon()
+
+		SG.should_send_crate = FALSE
+	if(SSshuttle.shuttle_loan_UID)
+		var/datum/event/shuttle_loan/shuttle_loan = locateUID(SSshuttle.shuttle_loan_UID)
+		if(!shuttle_loan.dispatched)
+			return
+		// let the situation spawn its items
+		var/list/spawn_list = list()
+		shuttle_loan.situation.spawn_items(spawn_list, emptyTurfs)
+		var/false_positive = 0
+		while(spawn_list.len && emptyTurfs.len)
+			var/turf/spawn_turf = pick_n_take(emptyTurfs)
+			if(spawn_turf.contents.len && false_positive < 5)
+				false_positive++
+				continue
+			var/spawn_type = pick_n_take(spawn_list)
+			new spawn_type(spawn_turf)
+		// Clear the event so it doesn't cause a problem again
+		SSshuttle.shuttle_loan_UID = null
+
+/obj/docking_port/mobile/supply/proc/scan_cargo()
+	manifest = new
+	SEND_SIGNAL(src, COMSIG_CARGO_BEGIN_SCAN)
+	for(var/atom/movable/AM in areaInstance)
+		if(deep_scan(AM, TRUE) == CARGO_PREVENT_SHUTTLE)
+			return FALSE
+	return TRUE
+
+/obj/docking_port/mobile/supply/proc/deep_scan(atom/movable/AM, top_level = FALSE)
+	var/handling = prefilter_atom(AM)
+	if(handling == CARGO_PREVENT_SHUTTLE)
+		return CARGO_PREVENT_SHUTTLE
+
+	var/found_priority = FALSE
+	for(var/atom/movable/child in AM)
+		var/child_handling = deep_scan(child)
+		if(child_handling == CARGO_PREVENT_SHUTTLE)
+			return CARGO_PREVENT_SHUTTLE
+		if(child_handling == CARGO_HAS_PRIORITY)
+			found_priority = TRUE
+
+	if(handling != CARGO_SKIP_ATOM)
+		if(handling == CARGO_REQUIRE_PRIORITY && !found_priority)
+			blocking_item = "locked containers that don't contain goal items ([AM])"
+			return CARGO_PREVENT_SHUTTLE
+		var/sellable = SEND_SIGNAL(src, COMSIG_CARGO_CHECK_SELL, AM)
+		manifest.items_to_sell[AM] = sellable
+		if(top_level)
+			if(!AM.anchored && !(sellable & COMSIG_CARGO_IS_SECURED))
+				manifest.loose_cargo = TRUE
+			return CARGO_OK
+		if(found_priority || sellable & COMSIG_CARGO_SELL_PRIORITY)
+			return CARGO_HAS_PRIORITY
+
+	return CARGO_OK
+
+/obj/docking_port/mobile/supply/proc/prefilter_atom(atom/movable/AM)
+	for(var/reason in blacklist)
+		if(is_type_in_list(AM, blacklist[reason]))
+			blocking_item = "[reason] ([AM])"
+			return CARGO_PREVENT_SHUTTLE
+
+	if(istype(AM, /obj/structure/largecrate))
+		blocking_item = "unopened large crates ([AM])"
+		return CARGO_PREVENT_SHUTTLE
+
+	if(istype(AM, /obj/structure/closet/crate))
+		var/obj/structure/closet/crate/C = AM
+		if(C.manifest)
+			blocking_item = "crates with their manifest still attached ([AM])"
+			return CARGO_PREVENT_SHUTTLE
+
+	if(istype(AM, /obj/structure/closet/crate/secure))
+		var/obj/structure/closet/crate/secure/SC = AM
+		if(SC.locked)
+			return CARGO_REQUIRE_PRIORITY
+		else if(istype(SC, /obj/structure/closet/crate/secure/personal))
+			blocking_item = "unlocked personal crates ([AM])"
+			return CARGO_PREVENT_SHUTTLE
+
+	if(istype(AM, /obj/item/storage/lockbox))
+		var/obj/item/storage/lockbox/LB = AM
+		if(LB.locked)
+			return CARGO_REQUIRE_PRIORITY
+
+	if(istype(AM, /obj/effect))
+		var/obj/effect/E = AM
+		if(E.is_cleanable())
+			return CARGO_OK
+		return CARGO_SKIP_ATOM
+
+	if(istype(AM, /mob/dead))
+		return CARGO_SKIP_ATOM
+
+	return CARGO_OK
+
 
 /obj/docking_port/mobile/supply/proc/sell()
-	if(z != level_name_to_num(CENTCOMM))		//we only sell when we are -at- centcomm
-		return 1
+	SEND_SIGNAL(src, COMSIG_CARGO_BEGIN_SELL)
+	SSeconomy.sold_atoms = list()
+	var/list/qdel_atoms = list()
+	var/list/rescue_atoms = list()
+	for(var/atom/movable/AM in manifest.items_to_sell)
+		var/sellable = manifest.items_to_sell[AM]
+		if(sellable & COMSIG_CARGO_SELL_PRIORITY)
+			SEND_SIGNAL(src, COMSIG_CARGO_DO_PRIORITY_SELL, AM, manifest)
+			SSeconomy.sold_atoms += "[AM.name](priority)"
+			qdel_atoms += AM
+			continue
+		else if(sellable & COMSIG_CARGO_SELL_NORMAL)
+			SEND_SIGNAL(src, COMSIG_CARGO_DO_SELL, AM, manifest)
+			SSeconomy.sold_atoms += "[AM.name](normal)"
+			qdel_atoms += AM
+			continue
+		else if(sellable & COMSIG_CARGO_SELL_WRONG)
+			SEND_SIGNAL(src, COMSIG_CARGO_SEND_ERROR, AM, manifest)
+			SSeconomy.sold_atoms += "[AM.name](error)"
+			qdel_atoms += AM
+			continue
+		else if(sellable & COMSIG_CARGO_MESS)
+			manifest.messy_shuttle = TRUE
+			SSeconomy.sold_atoms += "[AM.name](mess)"
+			qdel_atoms += AM
+			continue
+		else if(!AM.anchored && !(sellable & COMSIG_CARGO_SELL_SKIP))
+			manifest.sent_trash = TRUE
 
-	var/plasma_count = 0
-	var/intel_count = 0
-	var/crate_count = 0
+		rescue_atoms += AM
 
-	var/msg = ""
-	var/pointsEarned
+	for(var/atom/movable/AM in rescue_atoms)
+		if(AM.loc in qdel_atoms)
+			AM.forceMove(get_turf(AM))
 
-	for(var/atom/movable/MA in areaInstance)
-		if(MA.anchored)	continue
-		shuttle_master.sold_atoms += " [MA.name]"
+	for(var/AM in qdel_atoms)
+		qdel(AM)
 
-		// Must be in a crate (or a critter crate)!
-		if(istype(MA,/obj/structure/closet/crate) || istype(MA,/obj/structure/closet/critter))
-			shuttle_master.sold_atoms += ":"
-			if(!MA.contents.len)
-				shuttle_master.sold_atoms += " (empty)"
-			++crate_count
+	SEND_SIGNAL(src, COMSIG_CARGO_END_SELL, manifest)
 
-			var/find_slip = 1
-			for(var/thing in MA)
-				// Sell manifests
-				shuttle_master.sold_atoms += " [thing:name]"
-				if(find_slip && istype(thing,/obj/item/weapon/paper/manifest))
-					var/obj/item/weapon/paper/manifest/slip = thing
-					// TODO: Check for a signature, too.
-					if(slip.stamped && slip.stamped.len) //yes, the clown stamp will work. clown is the highest authority on the station, it makes sense
-						// Did they mark it as erroneous?
-						var/denied = 0
-						for(var/i=1,i<=slip.stamped.len,i++)
-							if(slip.stamped[i] == /obj/item/weapon/stamp/denied)
-								denied = 1
-						if(slip.erroneous && denied) // Caught a mistake by Centcom (IDEA: maybe Centcom rarely gets offended by this)
-							pointsEarned = slip.points - shuttle_master.points_per_crate
-							shuttle_master.points += pointsEarned // For now, give a full refund for paying attention (minus the crate cost)
-							msg += "<span class='good'>+[pointsEarned]</span>: Station correctly denied package [slip.ordernumber]: "
-							if(slip.erroneous & MANIFEST_ERROR_NAME)
-								msg += "Destination station incorrect. "
-							else if(slip.erroneous & MANIFEST_ERROR_COUNT)
-								msg += "Packages incorrectly counted. "
-							else if(slip.erroneous & MANIFEST_ERROR_ITEM)
-								msg += "Package incomplete. "
-							msg += "Points refunded.<br>"
-						else if(!slip.erroneous && !denied) // Approving a proper order awards the relatively tiny points_per_slip
-							shuttle_master.points += shuttle_master.points_per_slip
-							msg += "<span class='good'>+[shuttle_master.points_per_slip]</span>: Package [slip.ordernumber] accorded.<br>"
-						else // You done goofed.
-							if(slip.erroneous)
-								msg += "<span class='good'>+0</span>: Station approved package [slip.ordernumber] despite error: "
-								if(slip.erroneous & MANIFEST_ERROR_NAME)
-									msg += "Destination station incorrect."
-								else if(slip.erroneous & MANIFEST_ERROR_COUNT)
-									msg += "Packages incorrectly counted."
-								else if(slip.erroneous & MANIFEST_ERROR_ITEM)
-									msg += "We found unshipped items on our dock."
-								msg += "  Be more vigilant.<br>"
-							else
-								pointsEarned = round(shuttle_master.points_per_crate - slip.points)
-								shuttle_master.points += pointsEarned
-								msg += "<span class='bad'>[pointsEarned]</span>: Station denied package [slip.ordernumber]. Our records show no fault on our part.<br>"
-						find_slip = 0
-					continue
+	SSblackbox.record_feedback("amount", "cargo shipments", 1)
 
-				// Sell plasma
-				if(istype(thing, /obj/item/stack/sheet/mineral/plasma))
-					var/obj/item/stack/sheet/mineral/plasma/P = thing
-					plasma_count += P.amount
+	if(manifest.loose_cargo)
+		var/datum/economy/line_item/item = new
+		item.account = SSeconomy.cargo_account
+		item.credits = SSeconomy.fine_for_loose_cargo
+		item.reason = "Please remember to secure all items in crates."
+		manifest.line_items += item
+		SSblackbox.record_feedback("nested tally", "cargo fines", 1, list("loose cargo", "amount"))
+		SSblackbox.record_feedback("nested tally", "cargo fines", SSeconomy.fine_for_loose_cargo, list("loose cargo", "credits"))
+	if(manifest.messy_shuttle)
+		var/datum/economy/line_item/item = new
+		item.account = SSeconomy.cargo_account
+		item.credits = SSeconomy.fine_for_messy_shuttle
+		item.reason = "Shuttle cleaning fee."
+		manifest.line_items += item
+		SSblackbox.record_feedback("nested tally", "cargo fines", 1, list("messy shuttle", "amount"))
+		SSblackbox.record_feedback("nested tally", "cargo fines", SSeconomy.fine_for_messy_shuttle, list("messy shuttle", "credits"))
+	if(manifest.sent_trash)
+		var/datum/economy/line_item/item = new
+		item.account = SSeconomy.cargo_account
+		item.credits = SSeconomy.fine_for_selling_trash
+		item.reason = "Don't send us random junk."
+		manifest.line_items += item
+		SSblackbox.record_feedback("nested tally", "cargo fines", 1, list("sent trash", "amount"))
+		SSblackbox.record_feedback("nested tally", "cargo fines", SSeconomy.fine_for_selling_trash, list("sent trash", "credits"))
 
-				// Sell syndicate intel
-				if(istype(thing, /obj/item/documents/syndicate))
-					++intel_count
+	var/msg = "<center>---[station_time_timestamp()]---</center><br>"
 
-				// Sell tech levels
-				if(istype(thing, /obj/item/weapon/disk/tech_disk))
-					var/obj/item/weapon/disk/tech_disk/disk = thing
-					if(!disk.stored) continue
-					var/datum/tech/tech = disk.stored
+	var/list/credit_changes = list()
+	var/list/department_messages = list()
+	for(var/datum/economy/line_item/item in manifest.line_items)
+		if(!credit_changes[item.account])
+			credit_changes[item.account] = 0
+		credit_changes[item.account] += item.credits
 
-					var/cost = tech.getCost(shuttle_master.techLevels[tech.id])
-					if(cost)
-						shuttle_master.techLevels[tech.id] = tech.level
-						shuttle_master.points += cost
-						for(var/mob/M in player_list)
-							if(M.mind)
-								for(var/datum/job_objective/further_research/objective in M.mind.job_objectives)
-									objective.unit_completed(cost)
-						msg += "<span class='good'>+[cost]</span>: [tech.name] - new data.<br>"
-
-				// Sell designs
-				if(istype(thing, /obj/item/weapon/disk/design_disk))
-					var/obj/item/weapon/disk/design_disk/disk = thing
-					if(!disk.blueprint)
-						continue
-					var/datum/design/design = disk.blueprint
-					if(design.id in shuttle_master.researchDesigns)
-						continue
-					shuttle_master.points += shuttle_master.points_per_design
-					shuttle_master.researchDesigns += design.id
-					msg += "<span class='good'>+[shuttle_master.points_per_design]</span>: [design.name] design.<br>"
-
-				// Sell exotic plants
-				if(istype(thing, /obj/item/seeds))
-					var/obj/item/seeds/S = thing
-					if(S.rarity == 0) // Mundane species
-						msg += "<span class='bad'>+0</span>: We don't need samples of mundane species \"[capitalize(S.species)]\".<br>"
-					else if(shuttle_master.discoveredPlants[S.type]) // This species has already been sent to CentComm
-						var/potDiff = S.potency - shuttle_master.discoveredPlants[S.type] // Compare it to the previous best
-						if(potDiff > 0) // This sample is better
-							shuttle_master.discoveredPlants[S.type] = S.potency
-							msg += "<span class='good'>+[potDiff]</span>: New sample of \"[capitalize(S.species)]\" is superior. Good work.<br>"
-							shuttle_master.points += potDiff
-						else // This sample is worthless
-							msg += "<span class='bad'>+0</span>: New sample of \"[capitalize(S.species)]\" is not more potent than existing sample ([shuttle_master.discoveredPlants[S.type]] potency).<br>"
-					else // This is a new discovery!
-						shuttle_master.discoveredPlants[S.type] = S.potency
-						msg += "<span class='good'>[S.rarity]</span>: New species discovered: \"[capitalize(S.species)]\". Excellent work.<br>"
-						shuttle_master.points += S.rarity // That's right, no bonus for potency.  Send a crappy sample first to "show improvement" later
-		qdel(MA)
-		shuttle_master.sold_atoms += "."
-
-	if(plasma_count > 0)
-		pointsEarned = round(plasma_count * shuttle_master.points_per_plasma)
-		msg += "<span class='good'>+[pointsEarned]</span>: Received [plasma_count] unit(s) of exotic material.<br>"
-		shuttle_master.points += pointsEarned
-
-	if(intel_count > 0)
-		pointsEarned = round(intel_count * shuttle_master.points_per_intel)
-		msg += "<span class='good'>+[pointsEarned]</span>: Received [intel_count] article(s) of enemy intelligence.<br>"
-		shuttle_master.points += pointsEarned
-
-	if(crate_count > 0)
-		pointsEarned = round(crate_count * shuttle_master.points_per_crate)
-		msg += "<span class='good'>+[pointsEarned]</span>: Received [crate_count] crate(s).<br>"
-		shuttle_master.points += pointsEarned
-
-	shuttle_master.centcom_message = msg
-
-/proc/forbidden_atoms_check(atom/A)
-	var/list/blacklist = list(
-		/mob/living,
-		/obj/structure/blob,
-		/obj/structure/spider/spiderling,
-		/obj/item/weapon/disk/nuclear,
-		/obj/machinery/nuclearbomb,
-		/obj/item/device/radio/beacon,
-		/obj/machinery/the_singularitygen,
-		/obj/singularity,
-		/obj/machinery/teleport/station,
-		/obj/machinery/teleport/hub,
-		/obj/machinery/telepad,
-		/obj/machinery/telepad_cargo,
-		/obj/machinery/clonepod,
-		/obj/effect/hierophant,
-		/obj/item/device/warp_cube,
-		/obj/machinery/quantumpad
-	)
-	if(A)
-		if(is_type_in_list(A, blacklist))
-			return 1
-		for(var/thing in A)
-			if(.(thing))
-				return 1
-
-	return 0
-
-/********************
-    SUPPLY ORDER
- ********************/
-/datum/supply_order
-	var/ordernum
-	var/datum/supply_packs/object = null
-	var/orderedby = null
-	var/orderedbyRank
-	var/comment = null
-	var/crates
-
-/datum/controller/process/shuttle/proc/generateSupplyOrder(packId, _orderedby, _orderedbyRank, _comment, _crates)
-	if(!packId)
-		return
-	var/datum/supply_packs/P = supply_packs["[packId]"]
-	if(!P)
-		return
-
-	var/datum/supply_order/O = new()
-	O.ordernum = ordernum++
-	O.object = P
-	O.orderedby = _orderedby
-	O.orderedbyRank = _orderedbyRank
-	O.comment = _comment
-	O.crates = _crates
-
-	requestlist += O
-
-	return O
-
-/datum/supply_order/proc/generateRequisition(atom/_loc)
-	if(!object)
-		return
-
-	var/obj/item/weapon/paper/reqform = new /obj/item/weapon/paper(_loc)
-	playsound(_loc, 'sound/goonstation/machines/printer_thermal.ogg', 50, 1)
-	reqform.name = "Requisition Form - [crates] '[object.name]' for [orderedby]"
-	reqform.info += "<h3>[station_name()] Supply Requisition Form</h3><hr>"
-	reqform.info += "INDEX: #[shuttle_master.ordernum]<br>"
-	reqform.info += "REQUESTED BY: [orderedby]<br>"
-	reqform.info += "RANK: [orderedbyRank]<br>"
-	reqform.info += "REASON: [comment]<br>"
-	reqform.info += "SUPPLY CRATE TYPE: [object.name]<br>"
-	reqform.info += "NUMBER OF CRATES: [crates]<br>"
-	reqform.info += "ACCESS RESTRICTION: [object.access ? get_access_desc(object.access) : "None"]<br>"
-	reqform.info += "CONTENTS:<br>"
-	reqform.info += object.manifest
-	reqform.info += "<hr>"
-	reqform.info += "STAMP BELOW TO APPROVE THIS REQUISITION:<br>"
-
-	reqform.update_icon()	//Fix for appearing blank when printed.
-
-	return reqform
-
-/datum/supply_order/proc/createObject(atom/_loc, errors=0)
-	if(!object)
-		return
-
-	//create the crate
-	var/atom/Crate = new object.containertype(_loc)
-	Crate.name = "[object.containername] [comment ? "([comment])":"" ]"
-	if(object.access)
-		Crate:req_access = list(text2num(object.access))
-
-	//create the manifest slip
-	var/obj/item/weapon/paper/manifest/slip = new /obj/item/weapon/paper/manifest()
-	slip.erroneous = errors
-	slip.points = object.cost
-	slip.ordernumber = ordernum
-
-	var/stationName = (errors & MANIFEST_ERROR_NAME) ? new_station_name() : station_name()
-	var/packagesAmt = shuttle_master.shoppinglist.len + ((errors & MANIFEST_ERROR_COUNT) ? rand(1,2) : 0)
-
-	slip.name = "Shipping Manifest - '[object.name]' for [orderedby]"
-	slip.info = "<h3>[command_name()] Shipping Manifest</h3><hr><br>"
-	slip.info +="Order: #[ordernum]<br>"
-	slip.info +="Destination: [stationName]<br>"
-	slip.info +="Requested By: [orderedby]<br>"
-	slip.info +="Rank: [orderedbyRank]<br>"
-	slip.info +="Reason: [comment]<br>"
-	slip.info +="Supply Crate Type: [object.name]<br>"
-	slip.info +="Access Restriction: [object.access ? get_access_desc(object.access) : "None"]<br>"
-	slip.info +="[packagesAmt] PACKAGES IN THIS SHIPMENT<br>"
-	slip.info +="CONTENTS:<br><ul>"
-
-	//we now create the actual contents
-	var/list/contains
-	if(istype(object, /datum/supply_packs/misc/randomised))
-		var/datum/supply_packs/misc/randomised/SO = object
-		contains = list()
-		if(object.contains.len)
-			for(var/j=1, j<=SO.num_contained, j++)
-				contains += pick(object.contains)
-	else
-		contains = object.contains
-
-	for(var/typepath in contains)
-		if(!typepath)	continue
-		var/atom/A = new typepath(Crate)
-		if(object.amount && A.vars.Find("amount") && A:amount)
-			A:amount = object.amount
-		slip.info += "<li>[A.name]</li>"	//add the item to the manifest (even if it was misplaced)
-
-	if(istype(Crate, /obj/structure/closet/critter)) // critter crates do not actually spawn mobs yet and have no contains var, but the manifest still needs to list them
-		var/obj/structure/closet/critter/CritCrate = Crate
-		if(CritCrate.content_mob)
-			var/mob/crittername = CritCrate.content_mob
-			slip.info += "<li>[initial(crittername.name)]</li>"
-
-	if((errors & MANIFEST_ERROR_ITEM))
-		//secure and large crates cannot lose items
-		if(findtext("[object.containertype]", "/secure/") || findtext("[object.containertype]","/largecrate/"))
-			errors &= ~MANIFEST_ERROR_ITEM
+		if(item.credits > 0)
+			msg += "[SPAN_GOOD("[item.account.account_name] +[item.credits]")]: [item.reason]<br>"
+		else if(item.credits == 0)
+			msg += "<span class='[item.zero_is_good ? "good" : "bad"]'>[item.account.account_name] Notice</span>: [item.reason]<br>"
 		else
-			var/lostAmt = max(round(Crate.contents.len/10), 1)
-			//lose some of the items
-			while(--lostAmt >= 0)
-				qdel(pick(Crate.contents))
+			msg += "[SPAN_BAD("[item.account.account_name] [item.credits]")]: [item.reason]<br>"
 
-	//manifest finalisation
-	slip.info += "</ul><br>"
-	slip.info += "CHECK CONTENTS AND STAMP BELOW THE LINE TO CONFIRM RECEIPT OF GOODS<hr>" // And now this is actually meaningful.
-	slip.loc = Crate
-	if(istype(Crate, /obj/structure/closet/crate))
-		var/obj/structure/closet/crate/CR = Crate
-		CR.manifest = slip
-		CR.update_icon()
-		CR.announce_beacons = object.announce_beacons.Copy()
-	if(istype(Crate, /obj/structure/largecrate))
-		var/obj/structure/largecrate/LC = Crate
-		LC.manifest = slip
-		LC.update_icon()
+		if(item.requests_console_department)
+			if(!department_messages[item.requests_console_department])
+				department_messages[item.requests_console_department] = list()
+			if(!department_messages[item.requests_console_department][item.reason])
+				department_messages[item.requests_console_department][item.reason] = 0
+			department_messages[item.requests_console_department][item.reason]++
 
-	return Crate
-
-/***************************
-    ORDER/REQUESTS CONSOLE
- **************************/
-/obj/machinery/computer/supplycomp
-	name = "Supply Shuttle Console"
-	desc = "Used to order supplies."
-	icon_screen = "supply"
-	req_access = list(access_cargo)
-	circuit = /obj/item/weapon/circuitboard/supplycomp
-	var/temp = null
-	var/reqtime = 0
-	var/hacked = 0
-	var/can_order_contraband = 0
-	var/last_viewed_group = "categories"
-	var/datum/supply_packs/content_pack
-
-/obj/machinery/computer/ordercomp
-	name = "Supply Ordering Console"
-	desc = "Used to order supplies from cargo staff."
-	icon = 'icons/obj/computer.dmi'
-	icon_screen = "request"
-	circuit = /obj/item/weapon/circuitboard/ordercomp
-	var/reqtime = 0
-	var/last_viewed_group = "categories"
-	var/datum/supply_packs/content_pack
-
-/obj/machinery/computer/ordercomp/attack_ai(var/mob/user as mob)
-	return attack_hand(user)
-
-/obj/machinery/computer/ordercomp/attack_hand(var/mob/user as mob)
-	ui_interact(user)
-
-/obj/machinery/computer/ordercomp/ui_interact(mob/user, ui_key = "main", var/datum/nanoui/ui = null)
-	ui = nanomanager.try_update_ui(user, src, ui_key, ui)
-	if(!ui)
-		ui = new(user, src, ui_key, "order_console.tmpl", name, ORDER_SCREEN_WIDTH, ORDER_SCREEN_HEIGHT)
-		ui.open()
-
-/obj/machinery/computer/ordercomp/ui_data(mob/user, ui_key = "main", datum/topic_state/state = default_state)
-	var/data[0]
-	data["last_viewed_group"] = last_viewed_group
-
-	var/category_list[0]
-	for(var/category in all_supply_groups)
-		category_list.Add(list(list("name" = get_supply_group_name(category), "category" = category)))
-	data["categories"] = category_list
-
-	var/cat = text2num(last_viewed_group)
-	var/packs_list[0]
-	for(var/set_name in shuttle_master.supply_packs)
-		var/datum/supply_packs/pack = shuttle_master.supply_packs[set_name]
-		if(!pack.contraband && !pack.hidden && !pack.special && pack.group == cat)
-			// 0/1 after the pack name (set_name) is a boolean for ordering multiple crates
-			packs_list.Add(list(list("name" = pack.name, "amount" = pack.amount, "cost" = pack.cost, "command1" = list("doorder" = "[set_name]0"), "command2" = list("doorder" = "[set_name]1"), "command3" = list("contents" = set_name))))
-
-	data["supply_packs"] = packs_list
-	if(content_pack)
-		var/pack_name = sanitize(content_pack.name)
-		data["contents_name"] = pack_name
-		data["contents"] = content_pack.manifest
-		data["contents_access"] = content_pack.access ? get_access_desc(content_pack.access) : "None"
-
-	var/requests_list[0]
-	for(var/set_name in shuttle_master.requestlist)
-		var/datum/supply_order/SO = set_name
-		if(SO)
-			// Check if the user owns the request, so they can cancel requests
-			var/obj/item/weapon/card/id/I = user.get_id_card()
-			var/owned = 0
-			if(I && SO.orderedby == I.registered_name)
-				owned = 1
-			requests_list.Add(list(list("ordernum" = SO.ordernum, "supply_type" = SO.object.name, "orderedby" = SO.orderedby, "owned" = owned, "command1" = list("rreq" = SO.ordernum))))
-	data["requests"] = requests_list
-
-	var/orders_list[0]
-	for(var/set_name in shuttle_master.shoppinglist)
-		var/datum/supply_order/SO = set_name
-		if(SO)
-			orders_list.Add(list(list("ordernum" = SO.ordernum, "supply_type" = SO.object.name, "orderedby" = SO.orderedby)))
-	data["orders"] = orders_list
-
-	data["points"] = round(shuttle_master.points)
-	data["send"] = list("send" = 1)
-
-	data["moving"] = shuttle_master.supply.mode != SHUTTLE_IDLE
-	data["at_station"] = shuttle_master.supply.getDockedId() == "supply_home"
-	data["timeleft"] = shuttle_master.supply.timeLeft(600)
-
-	return data
-
-/obj/machinery/computer/ordercomp/Topic(href, href_list)
-	if(..())
-		return 1
-
-	if(href_list["doorder"])
-		if(world.time < reqtime)
-			visible_message("<b>[src]</b>'s monitor flashes, \"[world.time - reqtime] seconds remaining until another requisition form may be printed.\"")
-			nanomanager.update_uis(src)
-			return 1
-
-		var/index = copytext(href_list["doorder"], 1, lentext(href_list["doorder"])) //text2num(copytext(href_list["doorder"], 1))
-		var/multi = text2num(copytext(href_list["doorder"], -1))
-		if(!isnum(multi))
-			return 1
-		var/datum/supply_packs/P = shuttle_master.supply_packs[index]
-		if(!istype(P))
-			return 1
-		var/crates = 1
-		if(multi)
-			var/num_input = input(usr, "Amount:", "How many crates?") as null|num
-			if(!num_input || ..())
-				return 1
-			crates = Clamp(round(num_input), 1, 20)
-
-		var/timeout = world.time + 600
-		var/reason = input(usr,"Reason:","Why do you require this item?","") as null|text
-		if(world.time > timeout || !reason || ..())
-			return 1
-		reason = sanitize(copytext(reason, 1, MAX_MESSAGE_LEN))
-
-		var/idname = "*None Provided*"
-		var/idrank = "*None Provided*"
-		if(ishuman(usr))
-			var/mob/living/carbon/human/H = usr
-			idname = H.get_authentification_name()
-			idrank = H.get_assignment()
-		else if(issilicon(usr))
-			idname = usr.real_name
-
-		reqtime = (world.time + 5) % 1e5
-
-		//make our supply_order datums
-		for(var/i = 1; i <= crates; i++)
-			var/datum/supply_order/O = shuttle_master.generateSupplyOrder(index, idname, idrank, reason, crates)
-			if(!O)	return
-			if(i == 1)
-				O.generateRequisition(loc)
-
-	else if(href_list["rreq"])
-		var/ordernum = text2num(href_list["rreq"])
-		var/obj/item/weapon/card/id/I = usr.get_id_card()
-		for(var/i=1, i<=shuttle_master.requestlist.len, i++)
-			var/datum/supply_order/SO = shuttle_master.requestlist[i]
-			if(SO.ordernum == ordernum && (I && SO.orderedby == I.registered_name))
-				shuttle_master.requestlist.Cut(i,i+1)
-				break
-
-	else if(href_list["last_viewed_group"])
-		content_pack = null
-		last_viewed_group = text2num(href_list["last_viewed_group"])
-
-	else if(href_list["contents"])
-		var/topic = href_list["contents"]
-		if(topic == 1)
-			content_pack = null
+	for(var/datum/money_account/account in credit_changes)
+		if(account.account_type == ACCOUNT_TYPE_DEPARTMENT)
+			SSblackbox.record_feedback("tally", "cargo profits", credit_changes[account], "[account.account_name]")
 		else
-			var/datum/supply_packs/P = shuttle_master.supply_packs[topic]
-			content_pack = P
+			SSblackbox.record_feedback("tally", "cargo profits", credit_changes[account], "All personal accounts")
 
-	add_fingerprint(usr)
-	nanomanager.update_uis(src)
-	return 1
+		if(credit_changes[account] > 0)
+			GLOB.station_money_database.credit_account(account, credit_changes[account], "Supply Shuttle Exports Payment", "Central Command Supply Master", supress_log = FALSE)
+		else
+			GLOB.station_money_database.charge_account(account, -credit_changes[account], "Supply Shuttle Fine", "Central Command Supply Master", allow_overdraft = TRUE, supress_log = FALSE)
 
-/obj/machinery/computer/supplycomp/attack_ai(var/mob/user as mob)
-	return attack_hand(user)
+	for(var/department in department_messages)
+		var/list/rc_message = list()
+		for(var/message_piece in department_messages[department])
+			var/count = ""
+			if(department_messages[department][message_piece] > 1)
+				count = " (x[department_messages[department][message_piece]])"
+			rc_message += "[message_piece][count]"
+		send_requests_console_message(rc_message, "Procurement Office", department, "Stamped with the Central Command rubber stamp.", "Verified by the Central Command receiving department.", RQ_NORMALPRIORITY)
 
-/obj/machinery/computer/supplycomp/attack_hand(var/mob/user as mob)
-	if(!allowed(user) && !isobserver(user))
-		to_chat(user, "<span class='warning'>Access denied.</span>")
-		return 1
+	SSeconomy.centcom_message += "[msg]<hr>"
+	manifest = new
 
-	post_signal("supply")
-	ui_interact(user)
+
+// Convenience object that registers itself with the supply shuttle and provides
+// methods for you to override.
+/datum/economy/simple_seller
+
+/datum/economy/simple_seller/proc/register(obj/docking_port/mobile/supply/S)
+	RegisterSignal(S, COMSIG_CARGO_BEGIN_SCAN,			PROC_REF(begin_scan))
+	RegisterSignal(S, COMSIG_CARGO_CHECK_SELL,			PROC_REF(check_sell))
+	RegisterSignal(S, COMSIG_CARGO_BEGIN_SELL,			PROC_REF(begin_sell))
+	RegisterSignal(S, COMSIG_CARGO_DO_PRIORITY_SELL,	PROC_REF(sell_priority))
+	RegisterSignal(S, COMSIG_CARGO_DO_SELL,				PROC_REF(sell_normal))
+	RegisterSignal(S, COMSIG_CARGO_SEND_ERROR,			PROC_REF(sell_wrong))
+	RegisterSignal(S, COMSIG_CARGO_END_SELL,			PROC_REF(end_sell))
+
+/datum/economy/simple_seller/proc/begin_scan(obj/docking_port/mobile/supply/S)
+	SIGNAL_HANDLER  // COMSIG_CARGO_BEGIN_SCAN
 	return
 
-/obj/machinery/computer/supplycomp/emag_act(user as mob)
-	if(!hacked)
-		to_chat(user, "<span class='notice'>Special supplies unlocked.</span>")
-		hacked = 1
+/datum/economy/simple_seller/proc/check_sell(obj/docking_port/mobile/supply/S, atom/movable/AM)
+	SIGNAL_HANDLER  // COMSIG_CARGO_CHECK_SELL
+	return NONE
+
+/datum/economy/simple_seller/proc/begin_sell(obj/docking_port/mobile/supply/S)
+	SIGNAL_HANDLER  // COMSIG_CARGO_BEGIN_SELL
+	return
+
+/datum/economy/simple_seller/proc/sell_priority(obj/docking_port/mobile/supply/S, atom/movable/AM, datum/economy/cargo_shuttle_manifest/manifest)
+	SIGNAL_HANDLER  // COMSIG_CARGO_DO_PRIORITY_SELL
+	return check_sell(S, AM) & COMSIG_CARGO_SELL_PRIORITY
+
+/datum/economy/simple_seller/proc/sell_normal(obj/docking_port/mobile/supply/S, atom/movable/AM, datum/economy/cargo_shuttle_manifest/manifest)
+	SIGNAL_HANDLER  // COMSIG_CARGO_DO_SELL
+	return check_sell(S, AM) & COMSIG_CARGO_SELL_NORMAL
+
+/datum/economy/simple_seller/proc/sell_wrong(obj/docking_port/mobile/supply/S, atom/movable/AM, datum/economy/cargo_shuttle_manifest/manifest)
+	SIGNAL_HANDLER  // COMSIG_CARGO_SEND_ERROR
+	return check_sell(S, AM) & COMSIG_CARGO_SELL_WRONG
+
+/datum/economy/simple_seller/proc/end_sell(obj/docking_port/mobile/supply/S, datum/economy/cargo_shuttle_manifest/manifest)
+	SIGNAL_HANDLER  // COMSIG_CARGO_END_SELL
+	return
+
+
+/datum/economy/simple_seller/crates
+	var/crates = 0
+	var/credits = 0
+
+/datum/economy/simple_seller/crates/begin_sell(obj/docking_port/mobile/supply/S)
+	crates = 0
+	credits = 0
+
+/datum/economy/simple_seller/crates/check_sell(obj/docking_port/mobile/supply/S, AM)
+	if(istype(AM, /obj/structure/closet/crate) || istype(AM, /obj/structure/closet/critter) || istype(AM, /obj/structure/closet/crate/mail))
+		return COMSIG_CARGO_SELL_NORMAL | COMSIG_CARGO_IS_SECURED
+
+/datum/economy/simple_seller/crates/sell_normal(obj/docking_port/mobile/supply/S, atom/movable/AM, datum/economy/cargo_shuttle_manifest/manifest)
+	if(!..())
 		return
 
-/obj/machinery/computer/supplycomp/ui_interact(mob/user, ui_key = "main", var/datum/nanoui/ui = null)
-	ui = nanomanager.try_update_ui(user, src, ui_key, ui)
-	if(!ui)
-		ui = new(user, src, ui_key, "supply_console.tmpl", name, SUPPLY_SCREEN_WIDTH, SUPPLY_SCREEN_HEIGHT)
-		ui.open()
+	crates += 1
+	if(istype(AM, /obj/structure/closet/crate))
+		var/obj/structure/closet/crate/exported_crate = AM
+		credits += exported_crate.crate_value
+	else
+		credits += DEFAULT_CRATE_VALUE
 
-/obj/machinery/computer/supplycomp/ui_data(mob/user, ui_key = "main", datum/topic_state/state = default_state)
-	var/data[0]
-	data["last_viewed_group"] = last_viewed_group
+/datum/economy/simple_seller/crates/end_sell(obj/docking_port/mobile/supply/S, datum/economy/cargo_shuttle_manifest/manifest)
+	if(!credits)
+		return
+	var/datum/economy/line_item/item = new
+	item.account = SSeconomy.cargo_account
+	item.credits = credits
+	item.reason = "Returned [crates] crate(s)."
+	manifest.line_items += item
+	SSblackbox.record_feedback("tally", "cargo crates sold", crates, "amount")
+	SSblackbox.record_feedback("tally", "cargo crates sold", item.credits, "credits")
 
-	var/category_list[0]
-	for(var/category in all_supply_groups)
-		category_list.Add(list(list("name" = get_supply_group_name(category), "category" = category)))
-	data["categories"] = category_list
 
-	var/cat = text2num(last_viewed_group)
-	var/packs_list[0]
-	for(var/set_name in shuttle_master.supply_packs)
-		var/datum/supply_packs/pack = shuttle_master.supply_packs[set_name]
-		if((pack.hidden && hacked) || (pack.contraband && can_order_contraband) || (pack.special && pack.special_enabled) || (!pack.contraband && !pack.hidden && !pack.special))
-			if(pack.group == cat)
-				// 0/1 after the pack name (set_name) is a boolean for ordering multiple crates
-				packs_list.Add(list(list("name" = pack.name, "amount" = pack.amount, "cost" = pack.cost, "command1" = list("doorder" = "[set_name]0"), "command2" = list("doorder" = "[set_name]1"), "command3" = list("contents" = set_name))))
+/datum/economy/simple_seller/plasma
+	var/plasma = 0
 
-	data["supply_packs"] = packs_list
-	if(content_pack)
-		var/pack_name = sanitize(content_pack.name)
-		data["contents_name"] = pack_name
-		data["contents"] = content_pack.manifest
-		data["contents_access"] = content_pack.access ? get_access_desc(content_pack.access) : "None"
+/datum/economy/simple_seller/plasma/begin_sell(obj/docking_port/mobile/supply/S)
+	plasma = 0
 
-	var/requests_list[0]
-	for(var/set_name in shuttle_master.requestlist)
-		var/datum/supply_order/SO = set_name
-		if(SO)
-			if(!SO.comment)
-				SO.comment = "No comment."
-			requests_list.Add(list(list("ordernum" = SO.ordernum, "supply_type" = SO.object.name, "orderedby" = SO.orderedby, "comment" = SO.comment, "command1" = list("confirmorder" = SO.ordernum), "command2" = list("rreq" = SO.ordernum))))
-	data["requests"] = requests_list
+/datum/economy/simple_seller/plasma/check_sell(obj/docking_port/mobile/supply/S, atom/movable/AM)
+	if(istype(AM, /obj/item/stack/sheet/mineral/plasma))
+		return COMSIG_CARGO_SELL_NORMAL
 
-	var/orders_list[0]
-	for(var/set_name in shuttle_master.shoppinglist)
-		var/datum/supply_order/SO = set_name
-		if(SO)
-			orders_list.Add(list(list("ordernum" = SO.ordernum, "supply_type" = SO.object.name, "orderedby" = SO.orderedby, "comment" = SO.comment)))
-	data["orders"] = orders_list
+/datum/economy/simple_seller/plasma/sell_normal(obj/docking_port/mobile/supply/S, atom/movable/AM, datum/economy/cargo_shuttle_manifest/manifest)
+	if(!..())
+		return
 
-	data["canapprove"] = (shuttle_master.supply.getDockedId() == "supply_away") && !(shuttle_master.supply.mode != SHUTTLE_IDLE)
-	data["points"] = round(shuttle_master.points)
-	data["send"] = list("send" = 1)
-	data["message"] = shuttle_master.centcom_message ? shuttle_master.centcom_message : "Remember to stamp and send back the supply manifests."
+	var/obj/item/stack/sheet/mineral/plasma/P = AM
+	plasma += P.amount
 
-	data["moving"] = shuttle_master.supply.mode != SHUTTLE_IDLE
-	data["at_station"] = shuttle_master.supply.getDockedId() == "supply_home"
-	data["timeleft"] = shuttle_master.supply.timeLeft(600)
-	data["can_launch"] = !shuttle_master.supply.canMove()
-	return data
+/datum/economy/simple_seller/plasma/end_sell(obj/docking_port/mobile/supply/S, datum/economy/cargo_shuttle_manifest/manifest)
+	if(!plasma)
+		return
+	var/datum/economy/line_item/item = new
+	item.account = SSeconomy.cargo_account
+	item.credits = plasma * SSeconomy.credits_per_plasma
+	item.reason = "Received [plasma] unit(s) of exotic material."
+	manifest.line_items += item
+	SSblackbox.record_feedback("tally", "cargo plasma sold", plasma, "amount")
+	SSblackbox.record_feedback("tally", "cargo plasma sold", item.credits, "credits")
 
-/obj/machinery/computer/supplycomp/proc/is_authorized(mob/user)
-	if(allowed(user))
-		return 1
 
-	if(user.can_admin_interact())
-		return 1
+/datum/economy/simple_seller/intel
+	var/intel = 0
 
-	return 0
+/datum/economy/simple_seller/intel/begin_sell(obj/docking_port/mobile/supply/S)
+	intel = 0
 
-/obj/machinery/computer/supplycomp/Topic(href, href_list)
-	if(..())
-		return 1
+/datum/economy/simple_seller/intel/check_sell(obj/docking_port/mobile/supply/S, atom/movable/AM)
+	if(istype(AM, /obj/item/documents/syndicate))
+		return COMSIG_CARGO_SELL_NORMAL
 
-	if(!is_authorized(usr))
-		return 1
+/datum/economy/simple_seller/intel/sell_normal(obj/docking_port/mobile/supply/S, atom/movable/AM, datum/economy/cargo_shuttle_manifest/manifest)
+	if(!..())
+		return
 
-	if(!shuttle_master)
-		log_runtime(EXCEPTION("The shuttle_master controller datum is missing somehow."), src)
-		return 1
+	intel++
 
-	if(href_list["send"])
-		if(shuttle_master.supply.canMove())
-			to_chat(usr, "<span class='warning'>For safety reasons the automated supply shuttle cannot transport live organisms, classified nuclear weaponry or homing beacons.</span>")
-		else if(shuttle_master.supply.getDockedId() == "supply_home")
-			shuttle_master.toggleShuttle("supply", "supply_home", "supply_away", 1)
-			investigate_log("[key_name(usr)] has sent the supply shuttle away. Remaining points: [shuttle_master.points]. Shuttle contents: [shuttle_master.sold_atoms]", "cargo")
-		else if(!shuttle_master.supply.request(shuttle_master.getDock("supply_home")))
-			post_signal("supply")
-			if(LAZYLEN(shuttle_master.shoppinglist) && prob(10))
-				var/datum/supply_order/O = new /datum/supply_order()
-				O.ordernum = shuttle_master.ordernum
-				O.object = shuttle_master.supply_packs[pick(shuttle_master.supply_packs)]
-				O.orderedby = random_name(pick(MALE,FEMALE), species = "Human")
-				shuttle_master.shoppinglist += O
-				investigate_log("Random [O.object] crate added to supply shuttle")
+/datum/economy/simple_seller/intel/end_sell(obj/docking_port/mobile/supply/S, datum/economy/cargo_shuttle_manifest/manifest)
+	if(!intel)
+		return
+	var/datum/economy/line_item/item = new
+	item.account = SSeconomy.cargo_account
+	item.credits = intel * SSeconomy.credits_per_intel
+	item.reason = "Received [intel] article(s) of enemy intelligence."
+	manifest.line_items += item
+	SSblackbox.record_feedback("tally", "cargo intel sold", intel, "amount")
+	SSblackbox.record_feedback("tally", "cargo intel sold", item.credits, "credits")
 
-	else if(href_list["doorder"])
-		if(world.time < reqtime)
-			visible_message("<b>[src]</b>'s monitor flashes, \"[world.time - reqtime] seconds remaining until another requisition form may be printed.\"")
-			nanomanager.update_uis(src)
-			return 1
 
-		var/index = copytext(href_list["doorder"], 1, lentext(href_list["doorder"])) //text2num(copytext(href_list["doorder"], 1))
-		var/multi = text2num(copytext(href_list["doorder"], -1))
-		if(!isnum(multi))
-			return 1
-		var/datum/supply_packs/P = shuttle_master.supply_packs[index]
-		if(!istype(P))
-			return 1
-		var/crates = 1
-		if(multi)
-			var/num_input = input(usr, "Amount:", "How many crates?") as null|num
-			if(!num_input || !is_authorized(usr) || ..())
-				return 1
-			crates = Clamp(round(num_input), 1, 20)
+/datum/economy/simple_seller/alien_organs
 
-		var/timeout = world.time + 600
-		var/reason = input(usr,"Reason:","Why do you require this item?","") as null|text
-		if(world.time > timeout || !reason || !is_authorized(usr) || ..())
-			return 1
-		reason = sanitize(copytext(reason, 1, MAX_MESSAGE_LEN))
+/datum/economy/simple_seller/alien_organs/check_sell(obj/docking_port/mobile/supply/S, atom/movable/AM)
+	if(istype(AM, /obj/item/organ/internal/alien))
+		return COMSIG_CARGO_SELL_NORMAL
 
-		var/idname = "*None Provided*"
-		var/idrank = "*None Provided*"
+/datum/economy/simple_seller/alien_organs/sell_normal(obj/docking_port/mobile/supply/S, atom/movable/AM, datum/economy/cargo_shuttle_manifest/manifest)
+	if(!..())
+		return
 
-		if(ishuman(usr))
-			var/mob/living/carbon/human/H = usr
-			idname = H.get_authentification_name()
-			idrank = H.get_assignment()
-		else if(issilicon(usr))
-			idname = usr.real_name
+	var/obj/item/organ/internal/alien/organ = AM
+	var/datum/economy/line_item/item = new
+	item.account = SSeconomy.cargo_account
+	item.credits = organ.cargo_profit
+	item.reason = "Received a sample of exotic biological tissue."
+	manifest.line_items += item
+	SSblackbox.record_feedback("tally", "cargo alien organs sold", 1, "amount")
+	SSblackbox.record_feedback("tally", "cargo alien organs sold", item.credits, "credits")
 
-		//make our supply_order datums
-		for(var/i = 1; i <= crates; i++)
-			var/datum/supply_order/O = shuttle_master.generateSupplyOrder(index, idname, idrank, reason, crates)
-			if(!O)	return 1
-			if(i == 1)
-				O.generateRequisition(loc)
 
-	else if(href_list["confirmorder"])
-		if(shuttle_master.supply.getDockedId() != "supply_away" || shuttle_master.supply.mode != SHUTTLE_IDLE)
-			return 1
-		var/ordernum = text2num(href_list["confirmorder"])
-		var/datum/supply_order/O
-		var/datum/supply_packs/P
-		for(var/i=1, i<=shuttle_master.requestlist.len, i++)
-			var/datum/supply_order/SO = shuttle_master.requestlist[i]
-			if(SO.ordernum == ordernum)
-				O = SO
-				P = O.object
-				if(shuttle_master.points >= P.cost)
-					shuttle_master.requestlist.Cut(i,i+1)
-					shuttle_master.points -= P.cost
-					shuttle_master.shoppinglist += O
-					investigate_log("[key_name(usr)] has authorized an order for [P.name]. Remaining points: [shuttle_master.points].", "cargo")
-				else
-					to_chat(usr, "<span class='warning'>There are insufficient supply points for this request.</span>")
-				break
+/datum/economy/simple_seller/shipping_manifests
 
-	else if(href_list["rreq"])
-		var/ordernum = text2num(href_list["rreq"])
-		for(var/i=1, i<=shuttle_master.requestlist.len, i++)
-			var/datum/supply_order/SO = shuttle_master.requestlist[i]
-			if(SO.ordernum == ordernum)
-				shuttle_master.requestlist.Cut(i,i+1)
-				break
+/datum/economy/simple_seller/shipping_manifests/check_sell(obj/docking_port/mobile/supply/S, atom/movable/AM)
+	if(istype(AM,/obj/item/paper/manifest))
+		return COMSIG_CARGO_SELL_NORMAL
 
-	else if(href_list["last_viewed_group"])
-		content_pack = null
-		last_viewed_group = text2num(href_list["last_viewed_group"])
+/datum/economy/simple_seller/shipping_manifests/sell_normal(obj/docking_port/mobile/supply/S, atom/movable/AM, datum/economy/cargo_shuttle_manifest/manifest)
+	if(!..())
+		return
 
-	else if(href_list["contents"])
-		var/topic = href_list["contents"]
-		if(topic == 1)
-			content_pack = null
-		else
-			var/datum/supply_packs/P = shuttle_master.supply_packs[topic]
-			content_pack = P
+	var/obj/item/paper/manifest/slip = AM
 
-	add_fingerprint(usr)
-	nanomanager.update_uis(src)
-	return 1
+	var/error = FALSE
+	if(/obj/item/stamp/denied in slip.stamped)
+		error = "Package [slip.ordernumber] rejected. A Nanotrasen supply department official will reach out to you in 2-3 business days."
+		SSblackbox.record_feedback("tally", "cargo manifests rejected", 1, "amount")
+	else if(!(/obj/item/stamp/granted in slip.stamped))
+		error = "Received unstamped manifest for package [slip.ordernumber]. Remember to stamp all manifests before returning them."
+		SSblackbox.record_feedback("tally", "cargo manifests not stamped", 1, "amount")
 
-/obj/machinery/computer/supplycomp/proc/post_signal(var/command)
-	var/datum/radio_frequency/frequency = radio_controller.return_frequency(1435)
+	if(error)
+		var/datum/economy/line_item/item = new
+		item.account = SSeconomy.cargo_account
+		item.credits = 0
+		item.reason = error
+		manifest.line_items += item
+		return
 
-	if(!frequency) return
+	var/datum/economy/line_item/item = new
+	item.account = SSeconomy.cargo_account
+	item.credits = SSeconomy.credits_per_manifest
+	item.reason = "Package [slip.ordernumber] accorded."
+	manifest.line_items += item
+	SSblackbox.record_feedback("tally", "cargo manifests sold", 1, "amount")
+	SSblackbox.record_feedback("tally", "cargo manifests sold", item.credits, "credits")
 
-	var/datum/signal/status_signal = new
-	status_signal.source = src
-	status_signal.transmission_method = 1
-	status_signal.data["command"] = command
 
-	frequency.post_signal(src, status_signal)
+/datum/economy/simple_seller/tech_levels
+	var/list/temp_tech_levels
 
-/**********
-    MISC
- **********/
-/area/supply/station
-	name = "Supply Shuttle"
-	icon_state = "shuttle3"
-	requires_power = 0
+/datum/economy/simple_seller/tech_levels/begin_scan(obj/docking_port/mobile/supply/S)
+	temp_tech_levels = SSeconomy.tech_levels.Copy()
 
-/area/supply/dock
-	name = "Supply Shuttle"
-	icon_state = "shuttle3"
-	requires_power = 0
+/datum/economy/simple_seller/tech_levels/begin_sell(obj/docking_port/mobile/supply/S)
+	temp_tech_levels = SSeconomy.tech_levels.Copy()
 
-#undef ORDER_SCREEN_WIDTH
-#undef ORDER_SCREEN_HEIGHT
-#undef SUPPLY_SCREEN_WIDTH
-#undef SUPPLY_SCREEN_HEIGHT
+/datum/economy/simple_seller/tech_levels/proc/get_price(tech_rarity, tech_level, sold_level = null)
+	// Calculates tech disk's supply points sell cost
+	if(!sold_level)
+		sold_level = 1
+
+	if(sold_level >= tech_level)
+		return 0
+
+	var/cost = 0
+	for(var/i in (sold_level + 1) to tech_level)
+		cost += i * 5 * tech_rarity
+
+	return cost
+
+/datum/economy/simple_seller/tech_levels/check_sell(obj/docking_port/mobile/supply/S, atom/movable/AM)
+	if(istype(AM, /obj/item/disk/tech_disk))
+		var/obj/item/disk/tech_disk/disk = AM
+		if(!disk.tech_id)
+			return COMSIG_CARGO_SELL_WRONG
+
+		var/cost = get_price(disk.tech_rarity, disk.tech_level, temp_tech_levels[disk.tech_id])
+		if(cost)
+			temp_tech_levels[disk.tech_id] = disk.tech_level
+			return COMSIG_CARGO_SELL_NORMAL
+		return COMSIG_CARGO_SELL_WRONG
+
+/datum/economy/simple_seller/tech_levels/sell_normal(obj/docking_port/mobile/supply/S, atom/movable/AM, datum/economy/cargo_shuttle_manifest/manifest)
+	if(!..())
+		return
+
+	var/obj/item/disk/tech_disk/disk = AM
+	if(!disk.tech_id)
+		return
+
+	var/cost = get_price(disk.tech_rarity, disk.tech_level, SSeconomy.tech_levels[disk.tech_id])
+	if(!cost)
+		return
+
+	SSeconomy.tech_levels[disk.tech_id] = disk.tech_level
+	SSblackbox.record_feedback("tally", "cargo tech disks sold", 1, "amount")
+	SSblackbox.record_feedback("tally", "cargo tech disks sold", cost, "credits")
+
+	var/datum/economy/line_item/cargo_item = new
+	cargo_item.account = SSeconomy.cargo_account
+	cargo_item.credits = cost / 2
+	cargo_item.reason = "[disk.tech_name] - new data."
+	manifest.line_items += cargo_item
+
+	var/datum/economy/line_item/science_item = new
+	science_item.account = GLOB.station_money_database.get_account_by_department(DEPARTMENT_SCIENCE)
+	science_item.credits = cost / 2
+	science_item.reason = "[disk.tech_name] - new data."
+	manifest.line_items += science_item
+
+/datum/economy/simple_seller/tech_levels/sell_wrong(obj/docking_port/mobile/supply/S, atom/movable/AM, datum/economy/cargo_shuttle_manifest/manifest)
+	if(!..())
+		return
+
+	var/datum/economy/line_item/item = new
+	item.account = GLOB.station_money_database.get_account_by_department(DEPARTMENT_SCIENCE)
+	item.credits = 0
+
+	var/obj/item/disk/tech_disk/disk = AM
+	if(!disk.tech_id)
+		item.reason = "Blank tech disk."
+		manifest.line_items += item
+		SSblackbox.record_feedback("tally", "cargo tech disks sold", 1, "blank")
+		return
+
+	var/cost = get_price(disk.tech_rarity, disk.tech_level, SSeconomy.tech_levels[disk.tech_id])
+	if(!cost)
+		item.reason = "[disk.tech_name] - no new data."
+		manifest.line_items += item
+		SSblackbox.record_feedback("tally", "cargo tech disks sold", 1, "repeat")
+
+
+/datum/economy/simple_seller/designs
+	var/list/temp_designs
+
+/datum/economy/simple_seller/designs/begin_scan(obj/docking_port/mobile/supply/S)
+	temp_designs = SSeconomy.research_designs.Copy()
+
+/datum/economy/simple_seller/designs/begin_sell(obj/docking_port/mobile/supply/S)
+	temp_designs = SSeconomy.research_designs.Copy()
+
+/datum/economy/simple_seller/designs/check_sell(obj/docking_port/mobile/supply/S, atom/movable/AM)
+	if(istype(AM, /obj/item/disk/design_disk))
+		var/obj/item/disk/design_disk/disk = AM
+		if(!disk.blueprint)
+			return COMSIG_CARGO_SELL_WRONG
+		var/datum/design/design = disk.blueprint
+		if(design.id in temp_designs)
+			return COMSIG_CARGO_SELL_WRONG
+		temp_designs += design.id
+		return COMSIG_CARGO_SELL_NORMAL
+
+/datum/economy/simple_seller/designs/sell_normal(obj/docking_port/mobile/supply/S, atom/movable/AM, datum/economy/cargo_shuttle_manifest/manifest)
+	if(!..())
+		return
+
+	var/obj/item/disk/design_disk/disk = AM
+	if(!disk.blueprint)
+		return
+	var/datum/design/design = disk.blueprint
+	if(design.id in SSeconomy.research_designs)
+		return
+	SSeconomy.research_designs += design.id
+	SSblackbox.record_feedback("tally", "cargo design disks sold", 1, "amount")
+	SSblackbox.record_feedback("tally", "cargo design disks sold", SSeconomy.credits_per_design, "credits")
+
+	var/datum/economy/line_item/cargo_item = new
+	cargo_item.account = SSeconomy.cargo_account
+	cargo_item.credits = SSeconomy.credits_per_design / 2
+	cargo_item.reason = "[design.name] design."
+	manifest.line_items += cargo_item
+
+	var/datum/economy/line_item/science_item = new
+	science_item.account = GLOB.station_money_database.get_account_by_department(DEPARTMENT_SCIENCE)
+	science_item.credits = SSeconomy.credits_per_design / 2
+	science_item.reason = "[design.name] design."
+	manifest.line_items += science_item
+
+/datum/economy/simple_seller/designs/sell_wrong(obj/docking_port/mobile/supply/S, atom/movable/AM, datum/economy/cargo_shuttle_manifest/manifest)
+	if(!..())
+		return
+
+	var/datum/economy/line_item/item = new
+	item.account = GLOB.station_money_database.get_account_by_department(DEPARTMENT_SCIENCE)
+	item.credits = 0
+
+	var/obj/item/disk/design_disk/disk = AM
+	if(!disk.blueprint)
+		item.reason = "Blank design disk."
+		manifest.line_items += item
+		SSblackbox.record_feedback("tally", "cargo design disks sold", 1, "blank")
+		return
+	var/datum/design/design = disk.blueprint
+	if(design.id in SSeconomy.research_designs)
+		item.reason = "Duplicate design for [design.name]."
+		manifest.line_items += item
+		SSblackbox.record_feedback("tally", "cargo design disks sold", 1, "repeat")
+		return
+
+
+/datum/economy/simple_seller/seeds
+	var/list/temp_discovered
+
+/datum/economy/simple_seller/seeds/begin_scan(obj/docking_port/mobile/supply/S)
+	temp_discovered = SSeconomy.discovered_plants.Copy()
+
+/datum/economy/simple_seller/seeds/begin_sell(obj/docking_port/mobile/supply/S)
+	temp_discovered = SSeconomy.discovered_plants.Copy()
+
+/datum/economy/simple_seller/seeds/check_sell(obj/docking_port/mobile/supply/S, atom/movable/AM)
+	if(istype(AM, /obj/item/seeds))
+		var/obj/item/seeds/seed = AM
+		if(seed.rarity == 0) // Mundane species
+			return COMSIG_CARGO_SELL_WRONG
+		if(!temp_discovered[seed.type] || temp_discovered[seed.type] < seed.potency)
+			temp_discovered[seed.type] = seed.potency
+			return COMSIG_CARGO_SELL_NORMAL
+		return COMSIG_CARGO_SELL_WRONG
+
+/datum/economy/simple_seller/seeds/sell_normal(obj/docking_port/mobile/supply/S, atom/movable/AM, datum/economy/cargo_shuttle_manifest/manifest)
+	if(!..())
+		return
+
+	var/msg = ""
+	var/credits = 0
+	var/obj/item/seeds/seed = AM
+	if(seed.rarity == 0) // Mundane species
+		return
+	else if(SSeconomy.discovered_plants[seed.type])
+		// This species has already been sent to CentComm
+		// Compare it to the previous best
+		var/potDiff = seed.potency - SSeconomy.discovered_plants[seed.type]
+		if(potDiff > 0)
+			SSeconomy.discovered_plants[seed.type] = seed.potency
+			credits = potDiff
+			msg = "New sample of \"[capitalize(seed.species)]\" is superior. Good work."
+			SSblackbox.record_feedback("tally", "cargo seeds sold", 1, "improved")
+	else
+		// This is a new discovery!
+		SSeconomy.discovered_plants[seed.type] = seed.potency
+		credits = seed.rarity + seed.potency
+		msg = "New species discovered: \"[capitalize(seed.species)]\". Excellent work."
+		SSblackbox.record_feedback("tally", "cargo seeds sold", 1, "new")
+
+	if(credits == 0)
+		return
+
+	SSblackbox.record_feedback("tally", "cargo seeds sold", 1, "amount")
+	SSblackbox.record_feedback("tally", "cargo seeds sold", credits, "credits")
+
+	var/datum/economy/line_item/cargo_item = new
+	cargo_item.account = SSeconomy.cargo_account
+	cargo_item.credits = credits / 2
+	cargo_item.reason = msg
+	manifest.line_items += cargo_item
+
+	var/datum/economy/line_item/service_item = new
+	service_item.account = GLOB.station_money_database.get_account_by_department(DEPARTMENT_SERVICE)
+	service_item.credits = credits / 2
+	service_item.reason = msg
+	manifest.line_items += service_item
+
+/datum/economy/simple_seller/seeds/sell_wrong(obj/docking_port/mobile/supply/S, atom/movable/AM, datum/economy/cargo_shuttle_manifest/manifest)
+	if(!..())
+		return
+
+	var/datum/economy/line_item/item = new
+	item.account = GLOB.station_money_database.get_account_by_department(DEPARTMENT_SERVICE)
+	item.credits = 0
+
+	var/obj/item/seeds/seed = AM
+	if(seed.rarity == 0)
+		item.reason = "We don't need samples of mundane species \"[capitalize(seed.species)]\"."
+		manifest.line_items += item
+		SSblackbox.record_feedback("tally", "cargo seeds sold", 1, "boring")
+	else if(SSeconomy.discovered_plants[seed.type] && SSeconomy.discovered_plants[seed.type] < seed.potency)
+		item.reason = "New sample of \"[capitalize(seed.species)]\" is not more potent than existing sample ([SSeconomy.discovered_plants[seed.type]] potency)."
+		manifest.line_items += item
+		SSblackbox.record_feedback("tally", "cargo seeds sold", 1, "repeat")
+	// If neither succeeds, this seed was declared wrong by a different
+	// seller, so we should be quiet.
+
+
+/datum/economy/simple_seller/messes
+
+/datum/economy/simple_seller/messes/check_sell(obj/docking_port/mobile/supply/S, atom/movable/AM)
+	if(istype(AM, /obj/effect))
+		var/obj/effect/E = AM
+		if(E.is_cleanable())
+			return COMSIG_CARGO_MESS | COMSIG_CARGO_IS_SECURED
+
+
+/datum/economy/simple_seller/containers
+
+/datum/economy/simple_seller/containers/check_sell(obj/docking_port/mobile/supply/S, atom/movable/AM)
+	if(istype(AM, /obj/item/storage))
+		return COMSIG_CARGO_SELL_NORMAL
+
+/datum/economy/simple_seller/containers/sell_normal(obj/docking_port/mobile/supply/S, atom/movable/AM, datum/economy/cargo_shuttle_manifest/manifest)
+	if(!..())
+		return
+	SSblackbox.record_feedback("amount", "cargo containers sold", 1)
+
+
+/datum/economy/simple_seller/mechs
+
+/datum/economy/simple_seller/mechs/sell_normal(obj/docking_port/mobile/supply/S, atom/movable/AM, datum/economy/cargo_shuttle_manifest/manifest)
+	if(!..())
+		return
+	SSblackbox.record_feedback("tally", "cargo basic mechs sold", 1, "amount")
+	SSblackbox.record_feedback("tally", "cargo basic mechs sold", SSeconomy.credits_per_mech, "credits")
+
+	var/datum/economy/line_item/cargo_item = new
+	cargo_item.account = SSeconomy.cargo_account
+	cargo_item.credits = SSeconomy.credits_per_mech / 2
+	cargo_item.reason = "Received a working [AM.name], great job!"
+	manifest.line_items += cargo_item
+
+	var/datum/economy/line_item/science_item = new
+	science_item.account = GLOB.station_money_database.get_account_by_department(DEPARTMENT_SCIENCE)
+	science_item.credits = SSeconomy.credits_per_mech / 2
+	science_item.reason = "Received a working [AM.name], great job!"
+	manifest.line_items += science_item
+
+
+/datum/economy/simple_seller/mechs/check_sell(obj/docking_port/mobile/supply/S, atom/movable/AM)
+	if(istype(AM, /obj/mecha/working))
+		return COMSIG_CARGO_SELL_NORMAL
+
+
+// Skip mech parts to avoid complaining about them.
+/datum/economy/simple_seller/mech_parts
+
+/datum/economy/simple_seller/mech_parts/check_sell(obj/docking_port/mobile/supply/S, atom/movable/AM)
+	if(istype(AM.loc, /obj/mecha/working))
+		return COMSIG_CARGO_SELL_SKIP
+
+/datum/economy/simple_seller/explorer_salvage
+	var/list/salvage_counts = list()
+
+/datum/economy/simple_seller/explorer_salvage/begin_sell(obj/docking_port/mobile/supply/S)
+	LAZYCLEARLIST(salvage_counts)
+
+/datum/economy/simple_seller/explorer_salvage/check_sell(obj/docking_port/mobile/supply/S, atom/movable/AM)
+	if(istype(AM, /obj/item/salvage))
+		return COMSIG_CARGO_SELL_NORMAL
+
+/datum/economy/simple_seller/explorer_salvage/sell_normal(obj/docking_port/mobile/supply/S, atom/movable/AM, datum/economy/cargo_shuttle_manifest/manifest)
+	if(!..())
+		return
+
+	salvage_counts[AM.name]++
+
+/datum/economy/simple_seller/explorer_salvage/end_sell(obj/docking_port/mobile/supply/S, datum/economy/cargo_shuttle_manifest/manifest)
+	if(!salvage_counts)
+		return
+	for(var/salvage_name in salvage_counts)
+		var/datum/economy/line_item/item = new
+		item.account = SSeconomy.cargo_account
+		var/count = salvage_counts[salvage_name]
+		item.credits = count * SSeconomy.credits_per_salvage
+		item.reason = "Received [count] haul(s) of [salvage_name]."
+		manifest.line_items += item
+		SSblackbox.record_feedback("nested tally", "cargo salvage sold", count, list(salvage_name, "count"))
+		SSblackbox.record_feedback("nested tally", "cargo salvage sold", item.credits, list(salvage_name, "credits"))
+
+/datum/economy/simple_seller/shelved_items
+
+/datum/economy/simple_seller/shelved_items/check_sell(obj/docking_port/mobile/supply/S, atom/movable/AM)
+	if(AM.GetComponent(/datum/component/shelved))
+		return COMSIG_CARGO_IS_SECURED
+
+/datum/economy/cargo_shuttle_manifest
+	var/list/items_to_sell = list()
+	var/list/line_items = list()
+	var/loose_cargo = FALSE
+	var/messy_shuttle = FALSE
+	var/sent_trash = FALSE
+
+
+/datum/economy/line_item
+	var/datum/money_account/account
+	var/requests_console_department
+	var/credits
+	var/reason
+	var/zero_is_good = FALSE
+
+#undef MAX_CRATE_DELIVERY
+
+#undef CARGO_OK
+#undef CARGO_PREVENT_SHUTTLE
+#undef CARGO_SKIP_ATOM
+#undef CARGO_REQUIRE_PRIORITY
+#undef CARGO_HAS_PRIORITY

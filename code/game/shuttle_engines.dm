@@ -1,32 +1,14 @@
 /obj/structure/shuttle
 	name = "shuttle"
 	icon = 'icons/turf/shuttle.dmi'
-
-/obj/structure/shuttle/shuttleRotate(rotation)
-	..()
-	var/matrix/M = transform
-	M.Turn(rotation)
-	transform = M
-
-/obj/structure/shuttle/window
-	name = "shuttle window"
-	icon = 'icons/obj/podwindows.dmi'
-	icon_state = "1"
-	density = 1
-	opacity = 0
-	anchored = 1
-
-	CanPass(atom/movable/mover, turf/target, height)
-		if(!height) return 0
-		else return ..()
-
-	CanAtmosPass(turf/T)
-		return !density
+	resistance_flags = LAVA_PROOF | FIRE_PROOF | ACID_PROOF
+	max_integrity = 500
+	armor = list(MELEE = 100, BULLET = 10, LASER = 10, ENERGY = 0, BOMB = 0, RAD = 0, FIRE = 50, ACID = 70) //default + ignores melee
 
 /obj/structure/shuttle/engine
 	name = "engine"
-	density = 1
-	anchored = 1.0
+	density = TRUE
+	anchored = TRUE
 
 /obj/structure/shuttle/engine/heater
 	name = "heater"
@@ -39,17 +21,14 @@
 /obj/structure/shuttle/engine/propulsion
 	name = "propulsion"
 	icon_state = "propulsion"
-	opacity = 1
+	opacity = TRUE
 
 /obj/structure/shuttle/engine/propulsion/burst
-	name = "burst"
 
 /obj/structure/shuttle/engine/propulsion/burst/left
-	name = "left"
 	icon_state = "burst_l"
 
 /obj/structure/shuttle/engine/propulsion/burst/right
-	name = "right"
 	icon_state = "burst_r"
 
 /obj/structure/shuttle/engine/router

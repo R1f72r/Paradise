@@ -1,106 +1,109 @@
-/obj/item/device/assembly/health
+#define MAX_HEALTH_ACTIVATE 0
+#define MIN_HEALTH_ACTIVATE -150
+
+/obj/item/assembly/health
 	name = "health sensor"
 	desc = "Used for scanning and monitoring health."
 	icon_state = "health"
-	materials = list(MAT_METAL=800, MAT_GLASS=200)
+	materials = list(MAT_METAL = 800, MAT_GLASS = 200)
 	origin_tech = "magnets=1;biotech=1"
-	secured = 0
 
-	var/scanning = 0
-	var/health_scan
-	var/alarm_health = 0
+	/// Are we scanning our user's health?
+	var/scanning = FALSE
+	/// Our user's health
+	var/user_health
+	/// The health amount on which to activate
+	var/alarm_health = MAX_HEALTH_ACTIVATE
 
-
-
-/obj/item/device/assembly/health/activate()
-	if(!..())	return 0//Cooldown check
+/obj/item/assembly/health/activate()
+	if(!..())
+		return FALSE//Cooldown check
 	toggle_scan()
-	return 0
+	return FALSE
 
-/obj/item/device/assembly/health/toggle_secure()
+/obj/item/assembly/health/toggle_secure()
 	secured = !secured
 	if(secured && scanning)
-		processing_objects.Add(src)
+		START_PROCESSING(SSobj, src)
 	else
-		scanning = 0
-		processing_objects.Remove(src)
+		scanning = FALSE
+		user_health = null // Clear out the user data, we're no longer scanning
+		STOP_PROCESSING(SSobj, src)
 	update_icon()
 	return secured
 
-/obj/item/device/assembly/health/attackby(obj/item/weapon/W as obj, mob/user as mob)
-	if(istype(W, /obj/item/device/multitool))
-		if(alarm_health == 0)
-			alarm_health = -90
-			user.show_message("You toggle [src] to \"detect death\" mode.")
-		else
-			alarm_health = 0
-			user.show_message("You toggle [src] to \"detect critical state\" mode.")
-		return
-	else
-		return ..()
-
-/obj/item/device/assembly/health/process()
+/obj/item/assembly/health/process()
 	if(!scanning || !secured)
+		STOP_PROCESSING(SSobj, src) // It should never reach here, but if it somehow does stop processing
 		return
 
 	var/atom/A = src
 	if(connected && connected.holder)
 		A = connected.holder
 
-	for(A, A && !ismob(A), A=A.loc);
+	for(A, A && !ismob(A), A = A.loc); // For A, check A exists and that its not a mob, if these are both true then set A to A.loc and repeat
 	// like get_turf(), but for mobs.
+
+	if(!isliving(A))
+		user_health = null // We aint on a living thing, remove the previous data
+		return
+
 	var/mob/living/M = A
-
-	if(M)
-		health_scan = M.health
-		if(health_scan <= alarm_health)
-			pulse()
-			audible_message("[bicon(src)] *beep* *beep*", "*beep* *beep*")
-			toggle_scan()
-		return
-	return
-
-/obj/item/device/assembly/health/proc/toggle_scan()
-	if(!secured)	return 0
-	scanning = !scanning
-	if(scanning)
-		processing_objects.Add(src)
-	else
-		processing_objects.Remove(src)
-	return
-
-/obj/item/device/assembly/health/interact(mob/user as mob)//TODO: Change this to the wires thingy
-	if(!secured)
-		user.show_message("<span class='warning'>The [name] is unsecured!</span>")
-		return 0
-	var/dat = text("<TT><B>Health Sensor</B> <A href='?src=[UID()];scanning=1'>[scanning?"On":"Off"]</A>")
-	if(scanning && health_scan)
-		dat += "<BR>Health: [health_scan]"
-	var/datum/browser/popup = new(user, "hscan", name, 400, 400)
-	popup.set_content(dat)
-	popup.open(0)
-	onclose(user, "hscan")
-	return
-
-
-/obj/item/device/assembly/health/Topic(href, href_list)
-	..()
-	if(!ismob(usr))
-		return
-
-	var/mob/user = usr
-
-	if(!usr.canmove || usr.stat || usr.restrained() || !in_range(loc, usr))
-		usr << browse(null, "window=hscan")
-		onclose(usr, "hscan")
-		return
-
-	if(href_list["scanning"])
+	user_health = M.health
+	if(user_health <= alarm_health) // Its a health detector, not a death detector
+		pulse()
+		audible_message("[bicon(src)] *beep* *beep* *beep*")
+		playsound(src, 'sound/machines/triple_beep.ogg', 40, extrarange = -10)
 		toggle_scan()
 
-	if(href_list["close"])
-		usr << browse(null, "window=hscan")
+/obj/item/assembly/health/pickup(mob/user)
+	..()
+	ADD_TRAIT(user, TRAIT_CAN_VIEW_HEALTH, "HEALTH[UID()]")
+
+/obj/item/assembly/health/proc/toggle_scan()
+	if(!secured)
+		return FALSE
+	scanning = !scanning
+	if(scanning)
+		START_PROCESSING(SSobj, src)
+	else
+		user_health = null // Clear out the user data, we're no longer scanning
+		STOP_PROCESSING(SSobj, src)
+
+/obj/item/assembly/health/activate_self(mob/user)
+	. = ..()
+	ui_interact(user)
+
+/obj/item/assembly/health/ui_state(mob/user)
+	return GLOB.deep_inventory_state
+
+/obj/item/assembly/health/ui_interact(mob/user, datum/tgui/ui = null)
+	ui = SStgui.try_update_ui(user, src, ui)
+	if(!ui)
+		ui = new(user, src, "HealthSensor", name)
+		ui.open()
+
+/obj/item/assembly/health/ui_data(mob/user)
+	var/list/data = list()
+	data["on"] = scanning
+	data["alarm_health"] = alarm_health
+	data["user_health"] = user_health
+	data["maxHealth"] = MAX_HEALTH_ACTIVATE
+	data["minHealth"] = MIN_HEALTH_ACTIVATE
+	return data
+
+/obj/item/assembly/health/ui_act(action, list/params, datum/tgui/ui, datum/ui_state/state)
+	if(..())
 		return
 
-	attack_self(user)
-	return
+	. = TRUE
+
+	switch(action)
+		if("scan_toggle")
+			toggle_scan()
+
+		if("alarm_health")
+			alarm_health = clamp(text2num(params["alarm_health"]), MIN_HEALTH_ACTIVATE, MAX_HEALTH_ACTIVATE)
+
+#undef MAX_HEALTH_ACTIVATE
+#undef MIN_HEALTH_ACTIVATE

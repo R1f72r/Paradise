@@ -25,26 +25,28 @@
 	mind = null
 	return ..()
 
-/obj/item/seeds/replicapod/attackby(obj/item/weapon/W, mob/user, params)
-	if(istype(W,/obj/item/weapon/reagent_containers/syringe))
-		if(!contains_sample)
-			for(var/datum/reagent/blood/bloodSample in W.reagents.reagent_list)
-				if(bloodSample.data["mind"] && bloodSample.data["cloneable"] == 1)
-					mind = bloodSample.data["mind"]
-					ckey = bloodSample.data["ckey"]
-					realName = bloodSample.data["real_name"]
-					blood_gender = bloodSample.data["gender"]
-					blood_type = bloodSample.data["blood_type"]
-					factions = bloodSample.data["factions"]
-					W.reagents.clear_reagents()
-					to_chat(user, "<span class='notice'>You inject the contents of the syringe into the seeds.</span>")
-					contains_sample = 1
-				else
-					to_chat(user, "<span class='warning'>The seeds reject the sample!</span>")
-		else
-			to_chat(user, "<span class='warning'>The seeds already contain a genetic sample!</span>")
-	else
+/obj/item/seeds/replicapod/item_interaction(mob/user, obj/item/used, list/modifiers)
+	if(!istype(used, /obj/item/reagent_containers/syringe))
 		return ..()
+	if(contains_sample)
+		to_chat(user, SPAN_WARNING("The seeds already contain a genetic sample!"))
+		return ITEM_INTERACT_COMPLETE
+	for(var/datum/reagent/blood/bloodSample in used.reagents.reagent_list)
+		var/datum/dna/dna = bloodSample.data["dna"]
+		if(!(bloodSample.data["mind"] && bloodSample.data["cloneable"] && !(NO_CLONESCAN in dna.species.species_traits)))
+			to_chat(user, SPAN_WARNING("The seeds reject the sample!"))
+			return ITEM_INTERACT_COMPLETE
+		mind = bloodSample.data["mind"]
+		ckey = bloodSample.data["ckey"]
+		realName = bloodSample.data["real_name"]
+		blood_gender = bloodSample.data["gender"]
+		blood_type = bloodSample.data["blood_type"]
+		factions = bloodSample.data["factions"]
+		used.reagents.clear_reagents()
+		to_chat(user, SPAN_NOTICE("You inject the contents of the syringe into the seeds."))
+		contains_sample = 1
+		add_fingerprint(user)
+		return ITEM_INTERACT_COMPLETE
 
 /obj/item/seeds/replicapod/get_analyzer_text()
 	var/text = ..()
@@ -52,17 +54,16 @@
 		text += "\n It contains a blood sample!"
 	return text
 
-
-/obj/item/seeds/replicapod/harvest(mob/user = usr) //now that one is fun -- Urist
+/obj/item/seeds/replicapod/harvest(mob/user, obj/item/storage/bag/plants/bag)
 	var/obj/machinery/hydroponics/parent = loc
 	var/make_podman = 0
 	var/ckey_holder = null
-	if(config.revival_pod_plants)
+	if(GLOB.configuration.general.enable_revival_pod_plants)
 		if(ckey)
-			for(var/mob/M in player_list)
+			for(var/mob/M in GLOB.player_list)
 				if(isobserver(M))
-					var/mob/dead/observer/O = M
-					if(O.ckey == ckey && O.can_reenter_corpse)
+					var/mob/dead/observer/ghost = M
+					if(ghost.ckey == ckey && ghost.ghost_flags & GHOST_CAN_REENTER)
 						make_podman = 1
 						break
 				else
@@ -70,18 +71,18 @@
 						make_podman = 1
 						break
 		else //If the player has ghosted from his corpse before blood was drawn, his ckey is no longer attached to the mob, so we need to match up the cloned player through the mind key
-			for(var/mob/M in player_list)
+			for(var/mob/M in GLOB.player_list)
 				if(mind && M.mind && ckey(M.mind.key) == ckey(mind.key) && M.ckey && M.client && M.stat == DEAD && !M.suiciding)
 					if(isobserver(M))
-						var/mob/dead/observer/O = M
-						if(!O.can_reenter_corpse)
+						var/mob/dead/observer/ghost = M
+						if(!(ghost.ghost_flags & GHOST_CAN_REENTER))
 							break
 					make_podman = 1
 					ckey_holder = M.ckey
 					break
 
 	if(make_podman)	//all conditions met!
-		var/mob/living/carbon/human/diona/podman = new /mob/living/carbon/human/diona(parent.loc)
+		var/mob/living/carbon/human/pod_diona/podman = new /mob/living/carbon/human/pod_diona(parent.loc)
 		if(realName)
 			podman.real_name = realName
 		mind.transfer_to(podman)
@@ -91,8 +92,7 @@
 			podman.ckey = ckey_holder
 		podman.gender = blood_gender
 		podman.faction |= factions
-		podman.faction |= "plants"
-		podman.faction |= "vines"   //Pod grown Diona are allied with plants and vines alike.
+		SSblackbox.record_feedback("tally", "players_revived", 1, "replica_pod")
 
 	else //else, one packet of seeds. maybe two
 		var/seed_count = 1
@@ -102,5 +102,7 @@
 		for(var/i=0,i<seed_count,i++)
 			var/obj/item/seeds/replicapod/harvestseeds = src.Copy()
 			harvestseeds.forceMove(output_loc)
+			if(bag && bag.can_be_inserted(harvestseeds))
+				bag.handle_item_insertion(harvestseeds, user, TRUE)
 
-	parent.update_tray()
+	parent.update_tray(user, 1)

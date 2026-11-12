@@ -1,29 +1,32 @@
 /obj/structure/closet/athletic_mixed
 	name = "athletic wardrobe"
 	desc = "It's a storage unit for athletic wear."
-	icon_state = "mixed"
-	icon_closed = "mixed"
+	closed_door_sprite = "mixed"
 
-/obj/structure/closet/athletic_mixed/New()
-	..()
-	new /obj/item/clothing/under/shorts/grey(src)
-	new /obj/item/clothing/under/shorts/black(src)
-	new /obj/item/clothing/under/shorts/red(src)
-	new /obj/item/clothing/under/shorts/blue(src)
-	new /obj/item/clothing/under/shorts/green(src)
-	new /obj/item/clothing/under/swimsuit/red(src)
-	new /obj/item/clothing/under/swimsuit/black(src)
-	new /obj/item/clothing/under/swimsuit/blue(src)
-	new /obj/item/clothing/under/swimsuit/green(src)
-	new /obj/item/clothing/under/swimsuit/purple(src)
-
+/obj/structure/closet/athletic_mixed/populate_contents()
+	new /obj/item/clothing/under/pants/shorts/grey(src)
+	new /obj/item/clothing/under/pants/shorts/black(src)
+	new /obj/item/clothing/under/pants/shorts/red(src)
+	new /obj/item/clothing/under/pants/shorts/blue(src)
+	new /obj/item/clothing/under/pants/shorts/green(src)
+	new /obj/item/clothing/under/misc/swimsuit/red(src)
+	new /obj/item/clothing/under/misc/swimsuit/black(src)
+	new /obj/item/clothing/under/misc/swimsuit/blue(src)
+	new /obj/item/clothing/under/misc/swimsuit/green(src)
+	new /obj/item/clothing/under/misc/swimsuit/purple(src)
+	new /obj/item/clothing/under/misc/wetsuit/green(src)
+	new /obj/item/clothing/under/misc/wetsuit/gold(src)
+	new /obj/item/clothing/under/misc/wetsuit/pink(src)
+	new /obj/item/clothing/under/misc/wetsuit/purple(src)
+	new /obj/item/clothing/under/misc/wetsuit/orange(src)
+	new /obj/item/clothing/neck/towel(src)
+	new /obj/item/clothing/neck/towel(src)
 
 /obj/structure/closet/boxinggloves
 	name = "boxing gloves"
 	desc = "It's a storage unit for gloves for use in the boxing ring."
 
-/obj/structure/closet/boxinggloves/New()
-	..()
+/obj/structure/closet/boxinggloves/populate_contents()
 	new /obj/item/clothing/gloves/boxing/blue(src)
 	new /obj/item/clothing/gloves/boxing/green(src)
 	new /obj/item/clothing/gloves/boxing/yellow(src)
@@ -34,8 +37,7 @@
 	name = "mask closet"
 	desc = "IT'S A STORAGE UNIT FOR FIGHTER MASKS OLE!"
 
-/obj/structure/closet/masks/New()
-	..()
+/obj/structure/closet/masks/populate_contents()
 	new /obj/item/clothing/mask/luchador(src)
 	new /obj/item/clothing/mask/luchador/rudos(src)
 	new /obj/item/clothing/mask/luchador/tecnicos(src)
@@ -44,14 +46,13 @@
 /obj/structure/closet/lasertag/red
 	name = "red laser tag equipment"
 	desc = "It's a storage unit for laser tag equipment."
-	icon_state = "red"
-	icon_closed = "red"
+	closed_door_sprite = "red"
 
-/obj/structure/closet/lasertag/red/New()
-	..()
-	new /obj/item/weapon/gun/energy/laser/redtag(src)
-	new /obj/item/weapon/gun/energy/laser/redtag(src)
-	new /obj/item/weapon/gun/energy/laser/redtag(src)
+/obj/structure/closet/lasertag/red/populate_contents()
+	new /obj/item/beach_ball/dodgeball(src)
+	new /obj/item/gun/energy/laser/tag/red(src)
+	new /obj/item/gun/energy/laser/tag/red(src)
+	new /obj/item/gun/energy/laser/tag/red(src)
 	new /obj/item/clothing/suit/redtag(src)
 	new /obj/item/clothing/suit/redtag(src)
 	new /obj/item/clothing/suit/redtag(src)
@@ -60,14 +61,13 @@
 /obj/structure/closet/lasertag/blue
 	name = "blue laser tag equipment"
 	desc = "It's a storage unit for laser tag equipment."
-	icon_state = "blue"
-	icon_closed = "blue"
+	closed_door_sprite = "blue"
 
-/obj/structure/closet/lasertag/blue/New()
-	..()
-	new /obj/item/weapon/gun/energy/laser/bluetag(src)
-	new /obj/item/weapon/gun/energy/laser/bluetag(src)
-	new /obj/item/weapon/gun/energy/laser/bluetag(src)
+/obj/structure/closet/lasertag/blue/populate_contents()
+	new /obj/item/beach_ball/dodgeball(src)
+	new /obj/item/gun/energy/laser/tag/blue(src)
+	new /obj/item/gun/energy/laser/tag/blue(src)
+	new /obj/item/gun/energy/laser/tag/blue(src)
 	new /obj/item/clothing/suit/bluetag(src)
 	new /obj/item/clothing/suit/bluetag(src)
 	new /obj/item/clothing/suit/bluetag(src)

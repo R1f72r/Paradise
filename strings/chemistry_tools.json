@@ -51,7 +51,6 @@
 		"evil",
 		"exo",
 		"exotic",
-		"farty",
 		"flux",
 		"flying",
 		"freak",
@@ -374,10 +373,9 @@
 		"mutagen",
 		"pancuronium",
 		"radium",
-		"uranium",
 		"polonium",
 		"sodium_thiopental",
-		"triplepiss",
+		"triple_piss",
 		"hairgrownium",
 		"iron",
 		"sulfonal",
@@ -405,10 +403,10 @@
 		"suicider",
 		"moonshine",
 		"prions",
-		"grave_dust",
 		"nanomachines",
 		"chlorine",
-		"fluorine"
+		"fluorine",
+		"happiness"
 	],
 	"CYBERPUNK_drug_adulterants_safe": [
 		"mercury",
@@ -469,6 +467,9 @@
 		"prions",
 		"spidereggs",
 		"concentrated_initro",
-		"heartworms"
+		"heartworms",
+		"bacon_grease",
+		"lexorin",
+		"frigidi"
 	]
 }

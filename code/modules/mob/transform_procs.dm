@@ -1,19 +1,18 @@
 /mob/living/carbon/human/proc/monkeyize()
 	var/mob/H = src
-	H.dna.SetSEState(MONKEYBLOCK,1)
-	genemutcheck(H,MONKEYBLOCK,null,MUTCHK_FORCED)
+	H.dna.SetSEState(GLOB.monkeyblock, 1)
+	singlemutcheck(H, GLOB.monkeyblock, MUTCHK_FORCED)
 
 /mob/new_player/AIize()
-	spawning = 1
+	spawning = TRUE
 	return ..()
 
 /mob/living/carbon/AIize()
 	if(notransform)
 		return
 	for(var/obj/item/W in src)
-		unEquip(W)
-	notransform = 1
-	canmove = 0
+		drop_item_to_ground(W)
+	notransform = TRUE
 	icon = null
 	invisibility = 101
 	return ..()
@@ -22,13 +21,13 @@
 	if(client)
 		stop_sound_channel(CHANNEL_LOBBYMUSIC)
 
-	var/mob/living/silicon/ai/O = new (loc,,,1)//No MMI but safety is in effect.
+	var/mob/living/silicon/ai/O = new (loc, null, null,1)//No MMI but safety is in effect.
 	O.invisibility = 0
 	O.aiRestorePowerRoutine = 0
 
 	if(mind)
 		mind.transfer_to(O)
-		O.mind.original = O
+		O.mind.set_original_mob(O)
 	else
 		O.key = key
 
@@ -36,37 +35,45 @@
 
 	O.add_ai_verbs()
 
-	O.rename_self("AI",1)
+	O.rename_self("AI", TRUE)
 
-	spawn()
-		qdel(src)
+	O.blurb_it()
+
+	INVOKE_ASYNC(GLOBAL_PROC, GLOBAL_PROC_REF(qdel), src) // To prevent the proc from returning null. Todo: Convert to QDEL_IN
 	return O
 
 
 
-//human -> robot
-/mob/living/carbon/human/proc/Robotize()
+/**
+	For transforming humans into robots (cyborgs).
+
+	Arguments:
+	* cell_type: A type path of the cell the new borg should receive.
+	* connect_to_default_AI: TRUE if you want /robot/New() to handle connecting the borg to the AI with the least borgs.
+	* AI: A reference to the AI we want to connect to.
+*/
+/mob/living/carbon/human/proc/Robotize(cell_type = null, connect_to_default_AI = TRUE, mob/living/silicon/ai/AI = null)
 	if(notransform)
 		return
 	for(var/obj/item/W in src)
-		unEquip(W)
-	regenerate_icons()
-	notransform = 1
-	canmove = 0
+		drop_item_to_ground(W)
+
+	notransform = TRUE
 	icon = null
 	invisibility = 101
-	for(var/t in bodyparts)
-		qdel(t)
-	for(var/i in internal_organs)
-		qdel(i)
 
-	var/mob/living/silicon/robot/O = new /mob/living/silicon/robot( loc )
+	// Creating a new borg here will connect them to a default AI and notify that AI, if `connect_to_default_AI` is TRUE.
+	var/mob/living/silicon/robot/O = new /mob/living/silicon/robot(loc, connect_to_default_AI)
 
-	// cyborgs produced by Robotize get an automatic power cell
-	O.cell = new(O)
-	O.cell.maxcharge = 7500
-	O.cell.charge = 7500
+	// If `AI` is passed in, we want to connect to that AI specifically.
+	if(AI)
+		O.lawupdate = TRUE
+		O.connect_to_ai(AI)
 
+	if(!cell_type)
+		O.cell = new /obj/item/stock_parts/cell/high(O)
+	else
+		O.cell = new cell_type(O)
 
 	O.gender = gender
 	O.invisibility = 0
@@ -74,34 +81,42 @@
 	if(mind)		//TODO
 		mind.transfer_to(O)
 		if(O.mind.assigned_role == "Cyborg")
-			O.mind.original = O
+			O.mind.set_original_mob(O)
 		else if(mind && mind.special_role)
 			O.mind.store_memory("In case you look at this after being borged, the objectives are only here until I find a way to make them not show up for you, as I can't simply delete them without screwing up round-end reporting. --NeoFite")
 	else
 		O.key = key
 
-	O.loc = loc
+	O.forceMove(loc)
 	O.job = "Cyborg"
-	O.notify_ai(1)
 
 	if(O.mind && O.mind.assigned_role == "Cyborg")
-		if(O.mind.role_alt_title == "Android")
-			O.mmi = new /obj/item/device/mmi/posibrain(O)
-		else if(O.mind.role_alt_title == "Robot")
-			O.mmi = null //Robots do not have removable brains.
-		else
-			O.mmi = new /obj/item/device/mmi(O)
-
-		if(O.mmi) O.mmi.transfer_identity(src) //Does not transfer key/client.
-
-	callHook("borgify", list(O))
+		var/obj/item/mmi/new_mmi
+		switch(O.client.prefs.active_character.cyborg_brain_type)
+			if(ROBOBRAIN_BORG)
+				new_mmi = new /obj/item/mmi/robotic_brain(O)
+				if(new_mmi.brainmob)
+					new_mmi.brainmob.name = O.name
+			if(MMI_BORG)
+				new_mmi = new /obj/item/mmi(O)
+			if(POSITRONIC_BORG)
+				new_mmi = new /obj/item/mmi/robotic_brain/positronic(O)
+				if(new_mmi.brainmob)
+					new_mmi.brainmob.name = O.name
+			else
+				// This should never happen, but oh well
+				new_mmi = new /obj/item/mmi(O)
+		new_mmi.transfer_identity(src) //Does not transfer key/client.
+		// Replace the MMI.
+		QDEL_NULL(O.mmi)
+		O.mmi = new_mmi
 
 	O.update_pipe_vision()
 
+	O.check_custom_sprite()
 	O.Namepick()
 
-	spawn(0)//To prevent the proc from returning null.
-		qdel(src)
+	INVOKE_ASYNC(GLOBAL_PROC, GLOBAL_PROC_REF(qdel), src) // To prevent the proc from returning null. Todo: Convert to QDEL_IN
 	return O
 
 //human -> alien
@@ -109,10 +124,9 @@
 	if(notransform)
 		return
 	for(var/obj/item/W in src)
-		unEquip(W)
+		drop_item_to_ground(W)
 	regenerate_icons()
-	notransform = 1
-	canmove = 0
+	notransform = TRUE
 	icon = null
 	invisibility = 101
 	for(var/t in bodyparts)
@@ -133,129 +147,121 @@
 
 	to_chat(new_xeno, "<B>You are now an alien.</B>")
 	new_xeno.update_pipe_vision()
-	spawn(0)//To prevent the proc from returning null.
-		qdel(src)
-	return
+	qdel(src)
 
-/mob/living/carbon/human/proc/slimeize(adult as num, reproduce as num)
+/mob/living/carbon/human/proc/slimeize(reproduce as num)
 	if(notransform)
 		return
-	for(var/obj/item/W in src)
-		unEquip(W)
+	notransform = TRUE
+	for(var/obj/item/I in src)
+		drop_item_to_ground(I)
 	regenerate_icons()
-	notransform = 1
-	canmove = 0
 	icon = null
-	invisibility = 101
+	invisibility = INVISIBILITY_MAXIMUM
 	for(var/t in bodyparts)
 		qdel(t)
 
-	var/mob/living/carbon/slime/new_slime
+	var/mob/living/simple_animal/slime/new_slime
 	if(reproduce)
 		var/number = pick(14;2,3,4)	//reproduce (has a small chance of producing 3 or 4 offspring)
 		var/list/babies = list()
 		for(var/i=1,i<=number,i++)
-			var/mob/living/carbon/slime/M = new/mob/living/carbon/slime(loc)
-			M.nutrition = round(nutrition/number)
+			var/mob/living/simple_animal/slime/M = new/mob/living/simple_animal/slime(loc)
+			M.set_nutrition(round(nutrition / number))
 			step_away(M,src)
 			babies += M
 		new_slime = pick(babies)
 	else
-		new_slime = new /mob/living/carbon/slime(loc)
-		if(adult)
-			new_slime.is_adult = 1
-		else
+		new_slime = new /mob/living/simple_animal/slime(loc)
+	new_slime.a_intent = INTENT_HARM
 	new_slime.key = key
 
 	to_chat(new_slime, "<B>You are now a slime. Skreee!</B>")
 	new_slime.update_pipe_vision()
-	spawn(0)//To prevent the proc from returning null.
-		qdel(src)
-	return
+	. = new_slime
+	qdel(src)
 
 /mob/living/carbon/human/proc/corgize()
 	if(notransform)
 		return
 	for(var/obj/item/W in src)
-		unEquip(W)
+		drop_item_to_ground(W)
 	regenerate_icons()
-	notransform = 1
-	canmove = 0
+	notransform = TRUE
 	icon = null
 	invisibility = 101
 	for(var/t in bodyparts)	//this really should not be necessary
 		qdel(t)
 
-	var/mob/living/simple_animal/pet/corgi/new_corgi = new /mob/living/simple_animal/pet/corgi (loc)
-	new_corgi.a_intent = INTENT_HARM
+	var/mob/living/simple_animal/pet/dog/corgi/new_corgi = new /mob/living/simple_animal/pet/dog/corgi (loc)
 	new_corgi.key = key
 
 	to_chat(new_corgi, "<B>You are now a Corgi. Yap Yap!</B>")
 	new_corgi.update_pipe_vision()
-	spawn(0)//To prevent the proc from returning null.
-		qdel(src)
-	return
+	qdel(src)
 
-/mob/living/carbon/human/Animalize()
+/mob/living/carbon/human/Animalize(mob/living/mob_type)
+	var/mobpath = mob_type
+	if(!mobpath)
+		var/list/mobtypes = typesof(/mob/living/simple_animal)
+		mobpath = tgui_input_list(usr, "Which type of mob should [src] turn into?", "Choose a Type", mobtypes)
 
-	var/list/mobtypes = typesof(/mob/living/simple_animal)
-	var/mobpath = input("Which type of mob should [src] turn into?", "Choose a type") in mobtypes
+	if(!ispath(mobpath, /mob/living))
+		return
 
 	if(notransform)
 		return
 	for(var/obj/item/W in src)
-		unEquip(W)
+		drop_item_to_ground(W)
 
 	regenerate_icons()
-	notransform = 1
-	canmove = 0
+	notransform = TRUE
 	icon = null
 	invisibility = 101
 
 	for(var/t in bodyparts)
 		qdel(t)
 
-	var/mob/new_mob = new mobpath(src.loc)
+	var/mob/new_mob = new mobpath(loc)
 
 	new_mob.key = key
 	new_mob.a_intent = INTENT_HARM
-
-
 	to_chat(new_mob, "You suddenly feel more... animalistic.")
 	new_mob.update_pipe_vision()
-	spawn()
-		qdel(src)
-	return
+	qdel(src)
 
-/mob/proc/Animalize()
+/mob/proc/Animalize(mob/living/mob_type)
+	var/mobpath = mob_type
+	if(!mobpath)
+		var/list/mobtypes = typesof(/mob/living/simple_animal)
+		mobtypes |= subtypesof(/mob/living/basic)
+		mobpath = tgui_input_list(usr, "Which type of mob should [src] turn into?", "Choose a Type", mobtypes)
 
-	var/list/mobtypes = typesof(/mob/living/simple_animal)
-	var/mobpath = input("Which type of mob should [src] turn into?", "Choose a type") in mobtypes
+	if(!ispath(mobpath, /mob/living))
+		return
 
-	var/mob/new_mob = new mobpath(src.loc)
+	var/mob/new_mob = new mobpath(loc)
 
 	new_mob.key = key
 	new_mob.a_intent = INTENT_HARM
 	to_chat(new_mob, "You feel more... animalistic")
 	new_mob.update_pipe_vision()
-
 	qdel(src)
 
 
-/mob/living/carbon/human/proc/paize(var/name)
+/mob/living/carbon/human/proc/paize(name)
 	if(notransform)
 		return
 	for(var/obj/item/W in src)
-		unEquip(W)
+		drop_item_to_ground(W)
 	regenerate_icons()
-	notransform = 1
-	canmove = 0
+	notransform = TRUE
 	icon = null
 	invisibility = 101
 	for(var/t in bodyparts)	//this really should not be necessary
 		qdel(t)
 
-	var/obj/item/device/paicard/card = new(loc)
+	var/obj/item/paicard/card = new(loc)
 	var/mob/living/silicon/pai/pai = new(card)
 	pai.key = key
 	card.setPersonality(pai)
@@ -266,41 +272,35 @@
 
 	to_chat(pai, "<B>You have become a pAI! Your name is [pai.name].</B>")
 	pai.update_pipe_vision()
-	spawn(0)//To prevent the proc from returning null.
-		qdel(src)
-	return
+	qdel(src)
 
-/mob/proc/safe_respawn(var/MP)
-	if(!MP)
-		return 0
+/mob/living/carbon/proc/gorillize(rage = FALSE)
+	if(notransform)
+		return
 
-	if(ispath(MP, /mob/living/simple_animal/pet/cat))
-		return 1
-	if(ispath(MP, /mob/living/simple_animal/pet/corgi))
-		return 1
-	if(ispath(MP, /mob/living/simple_animal/crab))
-		return 1
-	if(ispath(MP, /mob/living/simple_animal/chicken))
-		return 1
-	if(ispath(MP, /mob/living/simple_animal/cow))
-		return 1
-	if(ispath(MP, /mob/living/simple_animal/parrot))
-		return 1
-	if(ispath(MP, /mob/living/simple_animal/pony))
-		return 1
-	if(ispath(MP, /mob/living/simple_animal/pet/fox))
-		return 1
-	if(ispath(MP, /mob/living/simple_animal/chick))
-		return 1
-	if(ispath(MP, /mob/living/simple_animal/pet/pug))
-		return 1
-	if(ispath(MP, /mob/living/simple_animal/butterfly))
-		return 1
+	if(stat == DEAD)
+		return
 
-	if(ispath(MP, /mob/living/simple_animal/borer) && !jobban_isbanned(src, ROLE_BORER) && !jobban_isbanned(src, "Syndicate"))
-		return 1
+	for(var/obj/item/W in get_all_slots())
+		drop_item_to_ground(W)
 
-	if(ispath(MP, /mob/living/simple_animal/diona) && !jobban_isbanned(src, ROLE_NYMPH))
-		return 1
+	regenerate_icons()
+	notransform = TRUE
+	icon = null
+	invisibility = INVISIBILITY_MAXIMUM
+	visible_message(SPAN_WARNING("[src] transforms into a gorilla!"), SPAN_WARNING("You transform into a gorilla! Ooga ooga!"), SPAN_WARNING("You hear a loud roar!"))
+	var/mob/living/basic/gorilla/new_gorilla
+	if(rage)
+		var/mob/living/basic/gorilla/rampaging/rampaging_gorilla = new (get_turf(src))
+		new_gorilla = rampaging_gorilla
+	else
+		new_gorilla = new (get_turf(src))
 
-	return 0
+	playsound(new_gorilla, 'sound/creatures/gorilla.ogg', 50)
+
+	if(mind)
+		mind.transfer_to(new_gorilla)
+	else
+		new_gorilla.key = key
+
+	qdel(src)

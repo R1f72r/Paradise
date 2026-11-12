@@ -5,22 +5,24 @@
 	icon_state = "seed-wheat"
 	species = "wheat"
 	plantname = "Wheat Stalks"
-	product = /obj/item/weapon/reagent_containers/food/snacks/grown/wheat
+	product = /obj/item/food/grown/wheat
 	production = 1
 	yield = 4
-	potency = 15
+	potency = 30
 	icon_dead = "wheat-dead"
 	mutatelist = list(/obj/item/seeds/wheat/oat, /obj/item/seeds/wheat/meat)
 	reagents_add = list("plantmatter" = 0.04)
 
-/obj/item/weapon/reagent_containers/food/snacks/grown/wheat
+/obj/item/food/grown/wheat
 	seed = /obj/item/seeds/wheat
 	name = "wheat"
 	desc = "Sigh... wheat... a-grain?"
 	gender = PLURAL
 	icon_state = "wheat"
 	filling_color = "#F0E68C"
+	tastes = list("wheat" = 1)
 	bitesize_mod = 2
+	distill_reagent = "beer"
 
 // Oat
 /obj/item/seeds/wheat/oat
@@ -29,17 +31,19 @@
 	icon_state = "seed-oat"
 	species = "oat"
 	plantname = "Oat Stalks"
-	product = /obj/item/weapon/reagent_containers/food/snacks/grown/oat
+	product = /obj/item/food/grown/oat
 	mutatelist = list()
 
-/obj/item/weapon/reagent_containers/food/snacks/grown/oat
+/obj/item/food/grown/oat
 	seed = /obj/item/seeds/wheat/oat
 	name = "oat"
 	desc = "Eat oats, do squats."
 	gender = PLURAL
 	icon_state = "oat"
 	filling_color = "#556B2F"
+	tastes = list("oat" = 1)
 	bitesize_mod = 2
+	distill_reagent = "ale"
 
 // Rice
 /obj/item/seeds/wheat/rice
@@ -48,11 +52,11 @@
 	icon_state = "seed-rice"
 	species = "rice"
 	plantname = "Rice Stalks"
-	product = /obj/item/weapon/reagent_containers/food/snacks/grown/rice
+	product = /obj/item/food/grown/rice
 	mutatelist = list()
 	growthstages = 3
 
-/obj/item/weapon/reagent_containers/food/snacks/grown/rice
+/obj/item/food/grown/rice
 	seed = /obj/item/seeds/wheat/rice
 	name = "rice"
 	desc = "Rice to meet you."
@@ -60,6 +64,8 @@
 	icon_state = "rice"
 	filling_color = "#FAFAD2"
 	bitesize_mod = 2
+	tastes = list("rice" = 1)
+	distill_reagent = "sake"
 
 //Meatwheat - grows into synthetic meat
 /obj/item/seeds/wheat/meat
@@ -68,11 +74,11 @@
 	icon_state = "seed-meatwheat"
 	species = "meatwheat"
 	plantname = "Meatwheat"
-	product = /obj/item/weapon/reagent_containers/food/snacks/grown/meatwheat
+	product = /obj/item/food/grown/meatwheat
 	mutatelist = list()
 	reagents_add = list("protein" = 0.04)
 
-/obj/item/weapon/reagent_containers/food/snacks/grown/meatwheat
+/obj/item/food/grown/meatwheat
 	name = "meatwheat"
 	desc = "Some blood-drenched wheat stalks. You can crush them into what passes for meat if you squint hard enough."
 	icon_state = "meatwheat"
@@ -80,12 +86,20 @@
 	filling_color = rgb(150, 0, 0)
 	bitesize_mod = 2
 	seed = /obj/item/seeds/wheat/meat
+	tastes = list("meatwheat" = 1)
+	can_distill = FALSE
 
-/obj/item/weapon/reagent_containers/food/snacks/grown/meatwheat/attack_self(mob/living/user)
-	user.visible_message("<span class='notice'>[user] crushes [src] into meat.</span>", "<span class='notice'>You crush [src] into something that resembles meat.</span>")
+/obj/item/food/grown/meatwheat/activate_self(mob/user)
+	if(..())
+		return ITEM_INTERACT_COMPLETE
+
+	user.visible_message(
+		SPAN_NOTICE("[user] crushes [src] into meat."),
+		SPAN_NOTICE("You crush [src] into something that resembles meat.")
+	)
 	playsound(user, 'sound/effects/blobattack.ogg', 50, 1)
-	var/obj/item/weapon/reagent_containers/food/snacks/meat/meatwheat/M = new(get_turf(user))
+	var/obj/item/food/meat/meatwheat/M = new(get_turf(user))
 	user.drop_item()
 	qdel(src)
 	user.put_in_hands(M)
-	return 1
+	return ITEM_INTERACT_COMPLETE

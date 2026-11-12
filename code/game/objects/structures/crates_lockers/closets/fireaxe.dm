@@ -2,206 +2,175 @@
 /obj/structure/closet/fireaxecabinet
 	name = "fire axe cabinet"
 	desc = "There is small label that reads \"For Emergency use only\" along with details for safe use of the axe. As if."
-	var/obj/item/weapon/twohanded/fireaxe/fireaxe = new/obj/item/weapon/twohanded/fireaxe
-	icon_state = "fireaxe1000"
-	icon_closed = "fireaxe1000"
-	icon_opened = "fireaxe1100"
-	anchored = 1
-	density = 0
-	var/localopened = 0 //Setting this to keep it from behaviouring like a normal closet and obstructing movement in the map. -Agouri
-	opened = 1
-	var/hitstaken = 0
-	locked = 1
-	var/smashed = 0
+	var/obj/item/fireaxe/fireaxe
+	icon_state = "fireaxe_full_0hits"
+	icon_closed = "fireaxe_full_0hits"
+	icon_opened = "fireaxe_full_open"
+	anchored = TRUE
+	density = FALSE
+	armor = list(MELEE = 50, BULLET = 20, LASER = 0, ENERGY = 100, BOMB = 10, RAD = 100, FIRE = 90, ACID = 50)
+	var/localopened = FALSE //Setting this to keep it from behaviouring like a normal closet and obstructing movement in the map. -Agouri
+	opened = TRUE
+	var/hitstaken = FALSE
+	locked = TRUE
+	var/smashed = FALSE
+	var/operating = FALSE
+	var/has_axe = null // Use a string over a boolean value to make the sprite names more readable
 
-	attackby(var/obj/item/O as obj, var/mob/living/user as mob)  //Marker -Agouri
-		//..() //That's very useful, Erro
+/obj/structure/closet/fireaxecabinet/populate_contents()
+	fireaxe = new/obj/item/fireaxe(src)
+	has_axe = "full"
+	update_icon(UPDATE_ICON_STATE)	// So its initial icon doesn't show it without the fireaxe
 
-		var/hasaxe = 0       //gonna come in handy later~
-		if(fireaxe)
-			hasaxe = 1
+/obj/structure/closet/fireaxecabinet/examine(mob/user)
+	. = ..()
+	if(!smashed)
+		. += SPAN_NOTICE("Use a multitool to lock/unlock it.")
+	else
+		. += SPAN_NOTICE("It is damaged beyond repair.")
 
-		if(isrobot(user) || src.locked)
-			if(istype(O, /obj/item/device/multitool))
-				to_chat(user, "<span class='warning'>Resetting circuitry...</span>")
-				playsound(user, 'sound/machines/lockreset.ogg', 50, 1)
-				if(do_after(user, 20 * O.toolspeed, target = src))
-					src.locked = 0
-					to_chat(user, "<span class = 'caution'> You disable the locking modules.</span>")
-					update_icon()
-				return
-			else if(istype(O, /obj/item/weapon))
-				user.changeNext_move(CLICK_CD_MELEE)
-				var/obj/item/weapon/W = O
-				if(src.smashed || src.localopened)
-					if(localopened)
-						localopened = 0
-						icon_state = text("fireaxe[][][][]closing",hasaxe,src.localopened,src.hitstaken,src.smashed)
-						spawn(10) update_icon()
-					return
-				else
-					user.do_attack_animation(src)
-					playsound(user, 'sound/effects/Glasshit.ogg', 100, 1) //We don't want this playing every time
-				if(W.force < 15)
-					to_chat(user, "<span class='notice'>The cabinet's protective glass glances off the hit.</span>")
-				else
-					src.hitstaken++
-					if(src.hitstaken == 4)
-						playsound(user, 'sound/effects/Glassbr3.ogg', 100, 1) //Break cabinet, receive goodies. Cabinet's fucked for life after that.
-						src.smashed = 1
-						src.locked = 0
-						src.localopened = 1
-				update_icon()
-			return
-		if(istype(O, /obj/item/weapon/twohanded/fireaxe) && src.localopened)
-			if(!fireaxe)
-				if(O:wielded)
-					to_chat(user, "<span class='warning'>Unwield the axe first.</span>")
-					return
-				fireaxe = O
-				user.drop_item(O)
-				src.contents += O
-				to_chat(user, "<span class='notice'>You place the fire axe back in the [src.name].</span>")
-				update_icon()
-			else
-				if(src.smashed)
-					return
-				else
-					localopened = !localopened
-					if(localopened)
-						icon_state = text("fireaxe[][][][]opening",hasaxe,src.localopened,src.hitstaken,src.smashed)
-						spawn(10) update_icon()
-					else
-						icon_state = text("fireaxe[][][][]closing",hasaxe,src.localopened,src.hitstaken,src.smashed)
-						spawn(10) update_icon()
-		else
-			if(src.smashed)
-				return
-			if(istype(O, /obj/item/device/multitool))
+/obj/structure/closet/fireaxecabinet/item_interaction(mob/living/user, obj/item/O, list/modifiers)
+	if(isrobot(user) || locked)
+		if(istype(O, /obj/item/multitool))
+			to_chat(user, SPAN_WARNING("Resetting circuitry..."))
+			playsound(user, 'sound/machines/lockreset.ogg', 50, 1)
+			if(do_after(user, 20 * O.toolspeed, target = src))
+				locked = FALSE
+				to_chat(user, SPAN_CAUTION("You disable the locking modules."))
+				update_icon(UPDATE_ICON_STATE)
+			return ITEM_INTERACT_COMPLETE
+		else if(isitem(O))
+			user.changeNext_move(CLICK_CD_MELEE)
+			var/obj/item/W = O
+			if(smashed || localopened)
 				if(localopened)
-					localopened = 0
-					icon_state = text("fireaxe[][][][]closing",hasaxe,src.localopened,src.hitstaken,src.smashed)
-					spawn(10) update_icon()
-					return
-				else
-					to_chat(user, "<span class='warning'>Resetting circuitry...</span>")
-					sleep(50)
-					src.locked = 1
-					to_chat(user, "<span class='notice'>You re-enable the locking modules.</span>")
-					playsound(user, 'sound/machines/lockenable.ogg', 50, 1)
-					if(do_after(user, 20 * O.toolspeed, target = src))
-						src.locked = 1
-						to_chat(user, "<span class = 'caution'> You re-enable the locking modules.</span>")
-					return
+					operate_panel()
+				return ITEM_INTERACT_COMPLETE
 			else
-				localopened = !localopened
-				if(localopened)
-					icon_state = text("fireaxe[][][][]opening",hasaxe,src.localopened,src.hitstaken,src.smashed)
-					spawn(10) update_icon()
-				else
-					icon_state = text("fireaxe[][][][]closing",hasaxe,src.localopened,src.hitstaken,src.smashed)
-					spawn(10) update_icon()
-
-
-
-
-	attack_hand(mob/user as mob)
-
-		var/hasaxe = 0
-		if(fireaxe)
-			hasaxe = 1
-
-		if(src.locked)
-			to_chat(user, "<span class='warning'>The cabinet won't budge!</span>")
-			return
-		if(localopened)
-			if(fireaxe)
-				user.put_in_hands(fireaxe)
-				fireaxe = null
-				to_chat(user, "<span class='notice'>You take the fire axe from the [name].</span>")
-				src.add_fingerprint(user)
-				update_icon()
+				user.do_attack_animation(src)
+				playsound(user, 'sound/effects/Glasshit.ogg', 100, 1) //We don't want this playing every time
+			if(W.force < 15)
+				to_chat(user, SPAN_NOTICE("The cabinet's protective glass glances off the hit."))
 			else
-				if(src.smashed)
-					return
-				else
-					localopened = !localopened
-					if(localopened)
-						src.icon_state = text("fireaxe[][][][]opening",hasaxe,src.localopened,src.hitstaken,src.smashed)
-						spawn(10) update_icon()
-					else
-						src.icon_state = text("fireaxe[][][][]closing",hasaxe,src.localopened,src.hitstaken,src.smashed)
-						spawn(10) update_icon()
-
+				hitstaken++
+				if(hitstaken == 4)
+					playsound(user, 'sound/effects/glassbr3.ogg', 100, 1) //Break cabinet, receive goodies. Cabinet's fucked for life after that.
+					smashed = TRUE
+					locked = FALSE
+					localopened = TRUE
+			update_icon(UPDATE_ICON_STATE)
+		return ITEM_INTERACT_COMPLETE
+	if(istype(O, /obj/item/fireaxe) && localopened)
+		if(!fireaxe)
+			var/obj/item/fireaxe/F = O
+			if(HAS_TRAIT(F, TRAIT_WIELDED))
+				to_chat(user, SPAN_WARNING("Unwield \the [F] first."))
+				return ITEM_INTERACT_COMPLETE
+			if(!user.unequip(F, FALSE))
+				to_chat(user, SPAN_WARNING("\The [F] stays stuck to your hands!"))
+				return ITEM_INTERACT_COMPLETE
+			fireaxe = F
+			has_axe = "full"
+			contents += F
+			to_chat(user, SPAN_NOTICE("You place \the [F] back in the [name]."))
+			update_icon(UPDATE_ICON_STATE)
 		else
-			localopened = !localopened //I'm pretty sure we don't need an if(src.smashed) in here. In case I'm wrong and it fucks up teh cabinet, **MARKER**. -Agouri
+			if(smashed)
+				return ITEM_INTERACT_COMPLETE
+			else
+				operate_panel()
+		return ITEM_INTERACT_COMPLETE
+	else
+		if(smashed)
+			return ITEM_INTERACT_COMPLETE
+		if(istype(O, /obj/item/multitool))
 			if(localopened)
-				src.icon_state = text("fireaxe[][][][]opening",hasaxe,src.localopened,src.hitstaken,src.smashed)
-				spawn(10) update_icon()
+				operate_panel()
+				return ITEM_INTERACT_COMPLETE
 			else
-				src.icon_state = text("fireaxe[][][][]closing",hasaxe,src.localopened,src.hitstaken,src.smashed)
-				spawn(10) update_icon()
-
-	attack_tk(mob/user as mob)
-		if(localopened && fireaxe)
-			fireaxe.forceMove(loc)
-			to_chat(user, "<span class='notice'>You telekinetically remove the fire axe.</span>")
-			fireaxe = null
-			update_icon()
-			return
-		attack_hand(user)
-
-	verb/toggle_openness() //nice name, huh? HUH?! -Erro //YEAH -Agouri
-		set name = "Open/Close"
-		set category = "Object"
-
-		if(isrobot(usr) || src.locked || src.smashed)
-			if(src.locked)
-				to_chat(usr, "<span class='warning'>The cabinet won't budge!</span>")
-			else if(src.smashed)
-				to_chat(usr, "<span class='notice'>The protective glass is broken!</span>")
-			return
-
-		localopened = !localopened
-		update_icon()
-
-	verb/remove_fire_axe()
-		set name = "Remove Fire Axe"
-		set category = "Object"
-
-		if(isrobot(usr))
-			return
-
-		if(localopened)
-			if(fireaxe)
-				usr.put_in_hands(fireaxe)
-				fireaxe = null
-				to_chat(usr, "<span class='notice'>You take the Fire axe from the [name].</span>")
-			else
-				to_chat(usr, "<span class='notice'>The [src.name] is empty.</span>")
+				to_chat(user, SPAN_WARNING("Resetting circuitry..."))
+				playsound(user, 'sound/machines/lockenable.ogg', 50, 1)
+				if(do_after(user, 20 * O.toolspeed, target = src))
+					locked = TRUE
+					to_chat(user, SPAN_CAUTION("You re-enable the locking modules."))
+				return ITEM_INTERACT_COMPLETE
 		else
-			to_chat(usr, "<span class='notice'>The [src.name] is closed.</span>")
-		update_icon()
+			operate_panel()
+		return ITEM_INTERACT_COMPLETE
 
-	attack_ai(mob/user as mob)
-		if(src.smashed)
-			to_chat(user, "<span class='warning'>The security of the cabinet is compromised.</span>")
-			return
+/obj/structure/closet/fireaxecabinet/attack_hand(mob/user as mob)
+	if(locked)
+		to_chat(user, SPAN_WARNING("The cabinet won't budge!"))
+		return
+	if(localopened && fireaxe)
+		user.put_in_hands(fireaxe)
+		to_chat(user, SPAN_NOTICE("You take \the [fireaxe] from [src]."))
+		has_axe = "empty"
+		fireaxe = null
+
+		add_fingerprint(user)
+		update_icon(UPDATE_ICON_STATE)
+		return
+	if(smashed)
+		return
+	operate_panel()
+
+/obj/structure/closet/fireaxecabinet/attack_tk(mob/user as mob)
+	if(localopened && fireaxe)
+		fireaxe.forceMove(loc)
+		to_chat(user, SPAN_NOTICE("You telekinetically remove \the [fireaxe]."))
+		has_axe = "empty"
+		fireaxe = null
+		update_icon(UPDATE_ICON_STATE)
+		return
+	attack_hand(user)
+
+/obj/structure/closet/fireaxecabinet/shove_impact(mob/living/target, mob/living/attacker)
+	// no, you can't shove people into a fireaxe cabinet either
+	return FALSE
+
+/obj/structure/closet/fireaxecabinet/attack_ai(mob/user as mob)
+	if(smashed)
+		to_chat(user, SPAN_WARNING("The security of the cabinet is compromised."))
+		return
+	else
+		locked = !locked
+		if(locked)
+			to_chat(user, SPAN_WARNING("Cabinet locked."))
 		else
-			locked = !locked
-			if(locked)
-				to_chat(user, "<span class='warning'>Cabinet locked.</span>")
-			else
-				to_chat(user, "<span class='notice'>Cabinet unlocked.</span>")
+			to_chat(user, SPAN_NOTICE("Cabinet unlocked."))
 
-	update_icon() //Template: fireaxe[has fireaxe][is opened][hits taken][is smashed]. If you want the opening or closing animations, add "opening" or "closing" right after the numbers
-		var/hasaxe = 0
-		if(fireaxe)
-			hasaxe = 1
-		icon_state = text("fireaxe[][][][]",hasaxe,src.localopened,src.hitstaken,src.smashed)
-
-	open()
+/obj/structure/closet/fireaxecabinet/proc/operate_panel()
+	if(operating)
 		return
+	operating = TRUE
+	localopened = !localopened
+	do_animate()
+	operating = FALSE
 
-	close()
-		return
+/obj/structure/closet/fireaxecabinet/proc/do_animate()
+	if(!localopened)
+		flick("fireaxe_[has_axe]_closing", src)
+	else
+		flick("fireaxe_[has_axe]_opening", src)
+	sleep(10)
+	update_icon(UPDATE_ICON_STATE)
+
+
+/obj/structure/closet/fireaxecabinet/update_icon_state()
+	if(localopened && !smashed)
+		icon_state = "fireaxe_[has_axe]_open"
+	else
+		icon_state = "fireaxe_[has_axe]_[hitstaken]hits"
+
+/obj/structure/closet/fireaxecabinet/update_overlays()
+	return list()
+
+/obj/structure/closet/fireaxecabinet/open()
+	return
+
+/obj/structure/closet/fireaxecabinet/close()
+	return
+
+/obj/structure/closet/fireaxecabinet/welder_act(mob/user, obj/item/I) //A bastion of sanity in a sea of madness
+	return

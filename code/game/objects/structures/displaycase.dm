@@ -1,328 +1,337 @@
-#define DISPLAYCASE_FRAME_CIRCUIT 0
-#define DISPLAYCASE_FRAME_SCREWDRIVER 1
-
-// List and hook used to set up the captain's print on their display case
-var/global/list/captain_display_cases = list()
-
-/hook/captain_spawned/proc/displaycase(mob/living/carbon/human/captain)
-	if(!captain_display_cases.len)
-		return 1
-	var/fingerprint = captain.get_full_print()
-	for(var/obj/structure/displaycase/D in captain_display_cases)
-		if(istype(D))
-			D.ue = fingerprint
-
-	return 1
-
-/obj/structure/displaycase_frame
-	name = "display case frame"
-	icon = 'icons/obj/stock_parts.dmi'
-	icon_state = "box_glass"
-	var/obj/item/weapon/airlock_electronics/circuit = null
-	var/obj/item/device/assembly/prox_sensor/sensor = null
-	var/state = DISPLAYCASE_FRAME_CIRCUIT
-
-/obj/structure/displaycase_frame/Destroy()
-	QDEL_NULL(circuit)
-	QDEL_NULL(sensor)
-	return ..()
-
-/obj/structure/displaycase_frame/attackby(obj/item/weapon/W as obj, mob/user as mob, params)
-	var/pstate = state
-	var/turf/T = get_turf(src)
-	switch(state)
-		if(DISPLAYCASE_FRAME_CIRCUIT)
-			if(istype(W, /obj/item/weapon/airlock_electronics) && W.icon_state != "door_electronics_smoked")
-				user.drop_item()
-				circuit = W
-				circuit.forceMove(src)
-				state++
-				to_chat(user, "<span class='notice'>You add the airlock electronics to the frame.</span>")
-				playsound(get_turf(src),W.usesound, 50, 1)
-			if(istype(W, /obj/item/weapon/crowbar))
-				new /obj/machinery/constructable_frame/machine_frame(T)
-				var/obj/item/stack/sheet/glass/G = new /obj/item/stack/sheet/glass(T)
-				G.amount = 5
-				qdel(src)
-				to_chat(user, "<span class='notice'>You pry the glass out of the frame.</span>")
-				playsound(get_turf(src), W.usesound, 50, 1)
-				return
-
-		if(DISPLAYCASE_FRAME_SCREWDRIVER)
-			if(isscrewdriver(W))
-				var/obj/structure/displaycase/C = new(T)
-				if(circuit.one_access)
-					C.req_access = null
-					C.req_one_access = circuit.conf_access
-				else
-					C.req_access = circuit.conf_access
-					C.req_one_access = null
-				if(isprox(sensor))
-					C.burglar_alarm = 1
-				playsound(get_turf(src), W.usesound, 50, 1)
-				qdel(src)
-				return
-			if(istype(W, /obj/item/weapon/crowbar))
-				circuit.forceMove(T)
-				circuit = null
-				if(isprox(sensor))
-					sensor.forceMove(T)
-					sensor = null
-				state--
-				to_chat(user, "<span class='notice'>You pry the electronics out of the frame.</span>")
-				playsound(get_turf(src), W.usesound, 50, 1)
-			if(isprox(W) && !isprox(sensor))
-				user.drop_item()
-				sensor = W
-				sensor.forceMove(src)
-				to_chat(user, "<span class='notice'>You add the proximity sensor to the frame.</span>")
-				playsound(src.loc, W.usesound, 50, 1)
-
-	if(pstate != state)
-		pstate = state
-		update_icon()
-
-/obj/structure/displaycase_frame/update_icon()
-	switch(state)
-		if(1)
-			icon_state = "box_glass_circuit"
-		else
-			icon_state = "box_glass"
-
 /obj/structure/displaycase
 	name = "display case"
 	icon = 'icons/obj/stationobjs.dmi'
-	icon_state = "glassbox20"
-	desc = "A display case for prized possessions. It taunts you to kick it."
-	density = 1
-	anchored = 1
-	unacidable = 1 //Dissolving the case would also delete the contents.
-	var/health = 30
-	var/obj/item/occupant = null
-	var/destroyed = 0
-	var/locked = 0
-	var/burglar_alarm = 0
-	var/ue = null
-	var/image/occupant_overlay = null
-	var/obj/item/weapon/airlock_electronics/circuit
-	var/start_showpiece_type = null //add type for items on display
+	icon_state = "glassbox"
+	desc = "A display case for prized possessions."
+	density = TRUE
+	anchored = TRUE
+	resistance_flags = ACID_PROOF
+	armor = list(MELEE = 30, BULLET = 0, LASER = 0, ENERGY = 0, BOMB = 10, RAD = 0, FIRE = 70, ACID = 100)
+	max_integrity = 200
+	integrity_failure = 50
+	/// The object stored inside.
+	var/obj/item/showpiece
+	/// If true, this is alarmed and will set off a siren when opened without proper access.
+	var/alert = FALSE
+	/// If this is currently unlocked
+	var/open = FALSE
+	/// If false, this can never be opened, and the item inside should be inaccessible. Good for showcases.
+	var/openable = TRUE
+	/// The electronics currently installed in this showpiece.
+	var/obj/item/airlock_electronics/electronics
+	/// The type that should be instantiated to fill the showpiece.
+	var/start_showpiece_type
+	/// A list of random items that could possibly fill the case, as well as a flavor message for them.
+	/// Takes sublists in the form of list("type" = /obj/item/bikehorn, "trophy_message" = "henk")
+	var/list/start_showpieces = list()
+	/// A flavor message to show with this item.
+	var/trophy_message = ""
+	/// Do we want to force alarms even if off station?
+	var/force_alarm = FALSE
 
-/obj/structure/displaycase/New()
+/obj/structure/displaycase/Initialize(mapload)
 	. = ..()
+	if(length(start_showpieces) && !start_showpiece_type)
+		var/list/showpiece_entry = pick(start_showpieces)
+		if(showpiece_entry && showpiece_entry["type"])
+			start_showpiece_type = showpiece_entry["type"]
+			if(showpiece_entry["trophy_message"])
+				trophy_message = showpiece_entry["trophy_message"]
 	if(start_showpiece_type)
-		occupant = new start_showpiece_type(src)
-	update_icon()
-
-/obj/structure/displaycase/captains_laser
-	name = "captain's display case"
-	desc = "A display case for the captain's antique laser gun. Hooked up with an anti-theft system."
-	burglar_alarm = 1
-	locked = 1
-	req_access = list(access_captain)
-	start_showpiece_type = /obj/item/weapon/gun/energy/laser/captain
+		showpiece = new start_showpiece_type(src)
+	update_icon(UPDATE_OVERLAYS)
 
 /obj/structure/displaycase/Destroy()
-	dump()
-	QDEL_NULL(circuit)
+	QDEL_NULL(electronics)
+	QDEL_NULL(showpiece)
 	return ..()
 
-/obj/structure/displaycase/captains_laser/Destroy()
-	captain_display_cases -= src
-	return ..()
+/obj/structure/displaycase/emag_act(mob/user)
+	if(!emagged)
+		to_chat(user, SPAN_WARNING("You override the ID lock on [src]."))
+		trigger_alarm()
+
+		emagged = TRUE
+		toggle_lock()
+		return TRUE
 
 /obj/structure/displaycase/examine(mob/user)
-	..(user)
-	to_chat(user, "<span class='notice'>Peering through the glass, you see that it contains:</span>")
-	if(occupant)
-		to_chat(user, "[bicon(occupant)] <span class='notice'>\A [occupant].</span>")
+	. = ..()
+	if(showpiece)
+		. += SPAN_NOTICE("There's \a [showpiece] displayed inside.")
 	else
-		to_chat(user, "Nothing.")
-
-/obj/structure/displaycase/proc/dump()
-	if(occupant)
-		occupant.forceMove(get_turf(src))
-		occupant = null
-	occupant_overlay = null
-
-/obj/structure/displaycase/ex_act(severity)
-	switch(severity)
-		if(1)
-			new /obj/item/weapon/shard(loc)
-			if(occupant)
-				dump()
-			qdel(src)
-		if(2)
-			if(prob(50))
-				src.health -= 15
-				src.healthcheck()
-		if(3)
-			if(prob(50))
-				src.health -= 5
-				src.healthcheck()
-
-/obj/structure/displaycase/bullet_act(var/obj/item/projectile/Proj)
-	if((Proj.damage_type == BRUTE || Proj.damage_type == BURN))
-		health -= Proj.damage
-	..()
-	src.healthcheck()
-	return
-
-/obj/structure/displaycase/blob_act()
-	if(prob(75))
-		new /obj/item/weapon/shard(loc)
-		if(occupant) dump()
-		qdel(src)
-
-/obj/structure/displaycase/proc/healthcheck()
-	if(src.health <= 0)
-		health = 0
-		if(!( src.destroyed ))
-			src.density = 0
-			src.destroyed = 1
-			new /obj/item/weapon/shard(loc)
-			playsound(get_turf(src), "shatter", 70, 1)
-			update_icon()
-			spawn(0)
-				burglar_alarm()
+		. += SPAN_NOTICE("It's empty.")
+	if(trophy_message)
+		. += "The plaque reads:\n [trophy_message]"
+	if(!openable)
+		. += SPAN_NOTICE("It seems to be sealed shut, there's no way you're getting that open.")
 	else
-		playsound(get_turf(src), 'sound/effects/Glasshit.ogg', 75, 1)
-	return
+		if(!open)
+			. += SPAN_NOTICE("The ID lock is active, you need to swipe an ID to open it (Shortcut: <b>Alt-Click</b>).")
+		else if((broken || open) && showpiece)
+			. += SPAN_NOTICE("[showpiece] is held in a loose low gravity suspension field. You can take [showpiece] out[broken ? "." : ", or lock [src] with an ID"].")
 
-/obj/structure/displaycase/proc/burglar_alarm()
-	if(burglar_alarm)
+	if(alert)
+		. += SPAN_NOTICE("It is hooked up with an anti-theft system.")
+	if(emagged)
+		. += SPAN_WARNING("The ID lock has been shorted out.")
+
+/obj/structure/displaycase/proc/dump(mob/user)
+	if(!showpiece)
+		return
+	if(!user)
+		showpiece.forceMove(loc)
+		showpiece = null
+		return
+	if(!istype(user, /mob/living/carbon/human) && !user.put_in_hands(showpiece))
+		showpiece.forceMove(loc)
+		showpiece = null
+		return
+
+	var/mob/living/carbon/human/human_user = user
+	if(!human_user.equip_to_slot_if_possible(showpiece, (human_user.hand ? ITEM_SLOT_LEFT_HAND : ITEM_SLOT_RIGHT_HAND), disable_warning = TRUE))
+		if(!human_user.equip_to_slot_if_possible(showpiece, (human_user.hand ? ITEM_SLOT_RIGHT_HAND : ITEM_SLOT_LEFT_HAND), disable_warning = TRUE))
+			showpiece.forceMove(loc)
+	showpiece = null
+
+/obj/structure/displaycase/play_attack_sound(damage_amount, damage_type = BRUTE, damage_flag = 0)
+	switch(damage_type)
+		if(BRUTE)
+			playsound(loc, 'sound/effects/glasshit.ogg', 75, TRUE)
+		if(BURN)
+			playsound(loc, 'sound/items/welder.ogg', 100, TRUE)
+
+/obj/structure/displaycase/deconstruct(disassembled = TRUE)
+	if(!(flags & NODECONSTRUCT))
+		dump()
+		if(!disassembled)
+			new /obj/item/shard(drop_location())
+			trigger_alarm()
+	qdel(src)
+
+/obj/structure/displaycase/obj_break(damage_flag)
+	if(!broken && !(flags & NODECONSTRUCT))
+		density = FALSE
+		broken = TRUE
+		open = TRUE
+		new /obj/item/shard(drop_location())
+		playsound(src, "shatter", 70, TRUE)
+		update_icon(UPDATE_OVERLAYS)
+		trigger_alarm()
+
+/obj/structure/displaycase/proc/trigger_alarm()
+	set waitfor = FALSE
+	if(alert && (is_station_contact(z) || force_alarm))
 		var/area/alarmed = get_area(src)
 		alarmed.burglaralert(src)
-		visible_message("<span class='danger'>The burglar alarm goes off!</span>")
+		visible_message(SPAN_DANGER("The burglar alarm goes off!"))
 		// Play the burglar alarm three times
 		for(var/i = 0, i < 4, i++)
 			playsound(src, 'sound/machines/burglar_alarm.ogg', 50, 0)
 			sleep(74) // 7.4 seconds long
 
-/obj/structure/displaycase/update_icon()
-	if(src.destroyed)
-		src.icon_state = "glassbox2b"
-	else
-		src.icon_state = "glassbox2[locked]"
-	overlays = 0
-	if(occupant)
-		var/icon/occupant_icon=getFlatIcon(occupant)
-		occupant_icon.Scale(16,16)
-		occupant_overlay = image(occupant_icon)
-		occupant_overlay.pixel_x = 8
-		occupant_overlay.pixel_y = 8
-		if(locked)
-			occupant_overlay.alpha = 128
-		overlays += occupant_overlay
-	return
+/obj/structure/displaycase/update_overlays()
+	. = ..()
+	if(broken)
+		. += "glassbox_broken"
+	if(showpiece)
+		var/mutable_appearance/showpiece_overlay = mutable_appearance(showpiece.icon, showpiece.icon_state)
+		showpiece_overlay.copy_overlays(showpiece)
+		showpiece_overlay.transform *= 0.6
+		. += showpiece_overlay
+	if(!open && !broken)
+		. += "glassbox_closed"
 
-/obj/structure/displaycase/attackby(obj/item/weapon/W as obj, mob/user as mob, params)
-	if(istype(W, /obj/item/weapon/card))
-		var/obj/item/weapon/card/id/I = W
-		if(!check_access(I))
-			to_chat(user, "<span class='warning'>Access denied.</span>")
-			return
-		locked = !locked
-		if(!locked)
-			to_chat(user, "[bicon(src)] <span class='notice'>\The [src] clicks as locks release, and it slowly opens for you.</span>")
-		else
-			to_chat(user, "[bicon(src)]  <span class='notice'>You close \the [src] and swipe your card, locking it.</span>")
-		update_icon()
+/obj/structure/displaycase/proc/id_act(mob/living/user, obj/item/card/id/id_card = null)
+	if(!istype(id_card))
+		id_card = user.get_id_card()
+	if(!openable)
+		to_chat(user, SPAN_WARNING("There is no ID scanner, looks like this one is sealed shut."))
 		return
-	if(istype(W,/obj/item/weapon/crowbar) && (!locked || destroyed))
-		user.visible_message("[user.name] pries \the [src] apart.", \
-			"You pry \the [src] apart.", \
-			"You hear something pop.")
-		var/turf/T = get_turf(src)
-		playsound(T, W.usesound, 50, 1)
-		dump()
-		var/obj/item/weapon/airlock_electronics/C = circuit
-		if(!C)
-			C = new (src)
-		C.one_access = !(req_access && req_access.len>0)
-		if(!C.one_access)
-			C.conf_access = req_access
-		else
-			C.conf_access = req_one_access
+	if(broken)
+		to_chat(user, SPAN_WARNING("[src] is broken, the ID lock won't do anything."))
+		return
+	if(allowed(user) || emagged)
+		to_chat(user, SPAN_NOTICE("You use [id_card] to [open ? "close" : "open"] [src]."))
+		toggle_lock()
+		return TRUE
+	else
+		to_chat(user, SPAN_WARNING("Access denied."))
+		return
 
-		if(!destroyed)
-			var/obj/structure/displaycase_frame/F = new(T)
-			F.state = DISPLAYCASE_FRAME_SCREWDRIVER
-			F.circuit = C
-			F.circuit.forceMove(F)
-			if(burglar_alarm)
-				new /obj/item/device/assembly/prox_sensor(T)
-			F.update_icon()
+/obj/structure/displaycase/AltClick(mob/living/user)
+	if(Adjacent(user))
+		id_act(user, user.get_id_card())
+
+/obj/structure/displaycase/item_interaction(mob/living/user, obj/item/I, list/modifiers)
+	if(I.GetID())
+		id_act(user, I)
+		return ITEM_INTERACT_COMPLETE
+	else if(open && !showpiece)
+		if(!(I.flags & (ABSTRACT | DROPDEL)) && user.drop_item())
+			I.forceMove(src)
+			showpiece = I
+			to_chat(user, SPAN_NOTICE("You put [I] on display"))
+			update_icon()
+		return ITEM_INTERACT_COMPLETE
+	else if(istype(I, /obj/item/stack/sheet/glass) && broken)
+		var/obj/item/stack/sheet/glass/G = I
+		if(G.get_amount() < 2)
+			to_chat(user, SPAN_WARNING("You need two glass sheets to fix the case!"))
+			return ITEM_INTERACT_COMPLETE
+		to_chat(user, SPAN_NOTICE("You start fixing [src]..."))
+		if(do_after(user, 20, target = src))
+			G.use(2)
+			broken = FALSE
+			open = FALSE
+			obj_integrity = max_integrity
+			update_icon(UPDATE_OVERLAYS)
+		return ITEM_INTERACT_COMPLETE
+	else
+		return ..()
+
+/obj/structure/displaycase/crowbar_act(mob/user, obj/item/I)
+	if((alert && !open) || !openable)
+		return
+	if(open && !showpiece && user.a_intent == INTENT_HELP) // The user can display a crowbar if they're on that intent specifically. Otherwise they'll either take it apart, or close it if the alarm's off
+		return
+	. = TRUE
+	if(!I.tool_use_check(user, 0))
+		return
+	if((open || broken) && user.a_intent == INTENT_HARM)
+		if(showpiece)
+			to_chat(user, SPAN_NOTICE("Remove the displayed object first."))
+			return
+		if(!I.use_tool(src, user, 15, volume = I.tool_volume))
+			return
+		if(!broken)
+			new /obj/item/stack/sheet/glass(drop_location(), 10)
 		else
-			C.forceMove(T)
-			circuit = null
-			new /obj/machinery/constructable_frame/machine_frame(T)
+			new /obj/item/shard(drop_location())
+		to_chat(user, SPAN_NOTICE("You start dismantling the case."))
+		var/obj/structure/displaycase_chassis/display = new(loc)
+		if(electronics)
+			electronics.forceMove(display)
+			display.electronics = electronics
 		qdel(src)
 		return
-	if(W.flags & ABSTRACT)
-		to_chat(user, "<span class='danger'>You can't put this into the case.</span>")
-		return
-	if(user.a_intent == INTENT_HARM)
-		if(locked && !destroyed)
-			src.health -= W.force
-			src.healthcheck()
-			..()
-		else if(!locked)
-			dump()
-			to_chat(user, "<span class='danger'>You smash \the [W] into the delicate electronics at the bottom of the case, and deactivate the hover field.</span>")
-			update_icon()
-	else
-		if(locked)
-			to_chat(user, "<span class='warning'>It's locked, you can't put anything into it.</span>")
+	if(!alert)
+		to_chat(user, SPAN_NOTICE("You start to [open ? "close":"open"] [src]."))
+		if(!I.use_tool(src, user, 20, volume = I.tool_volume))
 			return
-		if(!occupant)
-			if(!user.drop_item())
-				to_chat(user, "<span class='notice'>[W] is stuck to you. You cannot put it in [src]!</span>")
-				return
-			to_chat(user, "<span class='notice'>You insert \the [W] into \the [src], and it floats as the hoverfield activates.</span>")
-			user.drop_item()
-			W.forceMove(src)
-			occupant=W
-			update_icon()
+		to_chat(user,  SPAN_NOTICE("You [open ? "close":"open"] [src]."))
+		toggle_lock()
 
-/obj/structure/displaycase/attack_hand(mob/user as mob)
-	if(destroyed || (!locked && user.a_intent == INTENT_HARM))
-		if(occupant)
-			dump()
-			to_chat(user, "<span class='danger'>You smash your fist into the delicate electronics at the bottom of the case, and deactivate the hover field.</span>")
-			src.add_fingerprint(user)
-			update_icon()
-	else
-		if(user.a_intent == INTENT_HARM)
-			user.changeNext_move(CLICK_CD_MELEE)
-			user.do_attack_animation(src)
-			user.visible_message("<span class='danger'>[user.name] kicks \the [src]!</span>", \
-				"<span class='danger'>You kick \the [src]!</span>", \
-				"You hear glass crack.")
-			src.health -= 2
-			healthcheck()
-		else if(!locked)
-			if(ishuman(user))
-				var/mob/living/carbon/human/H = user
-				var/print = H.get_full_print()
-				if(!ue)
-					to_chat(user, "<span class='notice'>Your press your thumb against the fingerprint scanner, registering your identity with the case.</span>")
-					ue = print
-					return
-				if(ue != print)
-					to_chat(user, "<span class='warning'>Access denied.</span>")
-					return
+/obj/structure/displaycase/welder_act(mob/user, obj/item/I)
+	. = TRUE
+	if(default_welder_repair(user, I))
+		broken = FALSE
 
-				if(occupant)
-					to_chat(user, "<span class='notice'>Your press your thumb against the fingerprint scanner, and deactivate the hover field built into the case.</span>")
-					dump()
-					update_icon()
+/obj/structure/displaycase/proc/toggle_lock()
+	open = !open
+	update_icon(UPDATE_OVERLAYS)
+
+/obj/structure/displaycase/attack_hand(mob/user)
+	user.changeNext_move(CLICK_CD_MELEE)
+	if(showpiece && (broken || open))
+		to_chat(user, SPAN_NOTICE("You deactivate the hover field built into the case."))
+		dump(user)
+		add_fingerprint(user)
+		update_icon(UPDATE_OVERLAYS)
+		return
+	if(!open && openable)
+		to_chat(user, SPAN_NOTICE("The ID lock is active, you'll need to unlock it first."))
+		return
+	//prevents remote "kicks" with TK
+	if(!Adjacent(user))
+		return
+	user.visible_message(SPAN_DANGER("[user] kicks the display case."))
+	user.do_attack_animation(src, ATTACK_EFFECT_KICK)
+	take_damage(2)
+
+/obj/structure/displaycase_chassis
+	anchored = TRUE
+	name = "display case chassis"
+	desc = "The wooden base of a display case."
+	icon = 'icons/obj/stationobjs.dmi'
+	icon_state = "glassbox_chassis"
+	var/obj/item/airlock_electronics/electronics
+
+/obj/structure/displaycase_chassis/item_interaction(mob/living/user, obj/item/I, list/modifiers)
+	if(istype(I, /obj/item/airlock_electronics))
+		to_chat(user, SPAN_NOTICE("You start installing the electronics into [src]..."))
+		playsound(loc, I.usesound, 50, TRUE)
+		if(do_after(user, 30, target = src))
+			var/obj/item/airlock_electronics/new_electronics = I
+			if(user.drop_item() && !new_electronics.is_installed)
+				new_electronics.forceMove(src)
+				electronics = new_electronics
+				to_chat(user, SPAN_NOTICE("You install the airlock electronics."))
+				electronics.is_installed = TRUE
+		return ITEM_INTERACT_COMPLETE
+	else if(istype(I, /obj/item/stack/sheet/glass))
+		var/obj/item/stack/sheet/glass/G = I
+		if(G.get_amount() < 10)
+			to_chat(user, SPAN_WARNING("You need ten glass sheets to do this!"))
+			return ITEM_INTERACT_COMPLETE
+		to_chat(user, SPAN_NOTICE("You start adding [G] to [src]..."))
+		if(do_after(user, 20, target = src))
+			G.use(10)
+			var/obj/structure/displaycase/display = new(loc)
+			if(electronics)
+				electronics.forceMove(display)
+				display.electronics = electronics
+				display.alert = TRUE
+				if(electronics.one_access)
+					display.req_one_access = electronics.selected_accesses
 				else
-					to_chat(src, "[bicon(src)] <span class='warning'>\The [src] is empty!</span>")
-		else
-			user.changeNext_move(CLICK_CD_MELEE)
-			user.visible_message("[user.name] gently runs \his hands over [src] in appreciation of its contents.", \
-				"You gently run your hands over [src] in appreciation of its contents.", \
-				"You hear someone streaking glass with their greasy hands.")
+					display.req_access = electronics.selected_accesses
+			qdel(src)
+		return ITEM_INTERACT_COMPLETE
+	else
+		return ..()
 
-#undef DISPLAYCASE_FRAME_CIRCUIT
-#undef DISPLAYCASE_FRAME_SCREWDRIVER
+/obj/structure/displaycase_chassis/crowbar_act(mob/user, obj/item/I)
+	. = TRUE
+	if(!I.tool_use_check(user, 0))
+		return
+	if(electronics)
+		if(I.use_tool(src, user, 0, volume = I.tool_volume))
+			to_chat(user, SPAN_NOTICE("You remove the airlock electronics."))
+			new /obj/item/airlock_electronics(drop_location(), 1)
+			electronics.is_installed = FALSE
+			electronics = null
+
+/obj/structure/displaycase_chassis/wrench_act(mob/user, obj/item/I)
+	. = TRUE
+	if(!I.tool_use_check(user, 0))
+		return
+	if(electronics)
+		to_chat(user, SPAN_NOTICE("Remove the airlock electronics first."))
+		return
+	TOOL_ATTEMPT_DISMANTLE_MESSAGE
+	if(!I.use_tool(src, user, 30, volume = I.tool_volume))
+		return
+	TOOL_DISMANTLE_SUCCESS_MESSAGE
+	new /obj/item/stack/sheet/wood(drop_location(), 5)
+	qdel(src)
+
+//The lab cage and captains display case do not spawn with electronics, which is why req_access is needed.
+/obj/structure/displaycase/captain
+	alert = TRUE
+	start_showpiece_type = /obj/item/gun/energy/laser/captain
+	req_access = list(ACCESS_CAPTAIN)
+
+/obj/structure/displaycase/labcage
+	name = "lab cage"
+	alert = TRUE
+	desc = "A glass lab container for storing interesting creatures."
+	start_showpiece_type = /obj/item/clothing/mask/facehugger/lamarr
+	req_access = list(ACCESS_RD)
+
+/obj/structure/displaycase/stechkin
+	name = "officer's display case"
+	alert = TRUE
+	desc = "A display case containing a humble stechkin pistol. Never forget your roots."
+	start_showpiece_type = /obj/item/gun/projectile/automatic/pistol
+	req_access = list(ACCESS_SYNDICATE_COMMAND)

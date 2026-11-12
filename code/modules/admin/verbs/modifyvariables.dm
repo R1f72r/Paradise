@@ -1,13 +1,26 @@
-var/list/VVlocked = list("vars", "var_edited", "client", "firemut", "ishulk", "telekinesis", "xray", "ka", "virus", "viruses", "cuffed", "last_eaten", "unlock_content") // R_DEBUG
-var/list/VVicon_edit_lock = list("icon", "icon_state", "overlays", "underlays", "resize") // R_EVENT | R_DEBUG
-var/list/VVckey_edit = list("key", "ckey") // R_EVENT | R_DEBUG
-var/list/VVpixelmovement = list("step_x", "step_y", "step_size", "bound_height", "bound_width", "bound_x", "bound_y") // R_DEBUG + warning
-/client/proc/vv_get_class(var/var_value)
+GLOBAL_LIST_INIT(VVlocked, list("client", "firemut", "ishulk", "telekinesis", "xray", "ka", "virus", "viruses", "cuffed", "last_eaten", "unlock_content")) // R_DEBUG
+GLOBAL_LIST_INIT(VVicon_edit_lock, list("icon", "icon_state", "overlays", "underlays", "resize")) // R_EVENT | R_DEBUG
+GLOBAL_LIST_INIT(VVckey_edit, list("key", "ckey")) // R_EVENT | R_DEBUG
+GLOBAL_LIST_INIT(VVpixelmovement, list("step_x", "step_y", "step_size", "bound_height", "bound_width", "bound_x", "bound_y")) // R_DEBUG + warning
+// Stuff that can break the server in weird ways and shouldnt be messed with unless you actually know what you are doing
+GLOBAL_LIST_INIT(VVmaint_only, list("vars", "var_edited", "contents"))
+
+// Protect ALL these
+GLOBAL_PROTECT(VVlocked)
+GLOBAL_PROTECT(VVicon_edit_lock)
+GLOBAL_PROTECT(VVckey_edit)
+GLOBAL_PROTECT(VVpixelmovement)
+GLOBAL_PROTECT(VVmaint_only)
+
+/client/proc/vv_get_class(var_name, var_value)
 	if(isnull(var_value))
 		. = VV_NULL
 
 	else if(isnum(var_value))
-		. = VV_NUM
+		if(var_name in GLOB.bitfields)
+			. = VV_BITFIELD
+		else
+			. = VV_NUM
 
 	else if(istext(var_value))
 		if(findtext(var_value, "\n"))
@@ -21,13 +34,13 @@ var/list/VVpixelmovement = list("step_x", "step_y", "step_size", "bound_height",
 	else if(ismob(var_value))
 		. = VV_MOB_REFERENCE
 
-	else if(isloc(var_value))
+	else if(isatom(var_value))
 		. = VV_ATOM_REFERENCE
 
 	else if(istype(var_value, /matrix))
 		. = VV_MATRIX
 
-	else if(istype(var_value,/client))
+	else if(isclient(var_value))
 		. = VV_CLIENT
 
 	else if(istype(var_value, /datum))
@@ -46,10 +59,12 @@ var/list/VVpixelmovement = list("step_x", "step_y", "step_size", "bound_height",
 
 	else if(isfile(var_value))
 		. = VV_FILE
+	else if(istype(var_value, /regex))
+		. = VV_REGEX
 	else
 		. = VV_NULL
 
-/client/proc/vv_get_value(class, default_class, current_value, list/restricted_classes, list/extra_classes, list/classes)
+/client/proc/vv_get_value(class, default_class, current_value, list/restricted_classes, list/extra_classes, list/classes, var_name)
 	. = list("class" = class, "value" = null)
 	if(!class)
 		if(!classes)
@@ -66,11 +81,15 @@ var/list/VVpixelmovement = list("step_x", "step_y", "step_size", "bound_height",
 				VV_DATUM_TYPE,
 				VV_TYPE,
 				VV_MATRIX,
+				VV_REGEX,
 				VV_FILE,
 				VV_NEW_ATOM,
 				VV_NEW_DATUM,
 				VV_NEW_TYPE,
 				VV_NEW_LIST,
+				VV_VISIBLE_ATOM,
+				VV_INSIDE_VISIBLE_ATOM,
+				VV_VISIBLE_TURF,
 				VV_NULL,
 				VV_RESTORE_DEFAULT
 				)
@@ -107,6 +126,11 @@ var/list/VVpixelmovement = list("step_x", "step_y", "step_size", "bound_height",
 				.["class"] = null
 				return
 
+		if(VV_BITFIELD)
+			.["value"] = input_bitfield(usr, var_name, current_value)
+			if(.["value"] == null)
+				.["class"] = null
+				return
 
 		if(VV_ATOM_TYPE)
 			.["value"] = pick_closest_path(FALSE)
@@ -136,10 +160,18 @@ var/list/VVpixelmovement = list("step_x", "step_y", "step_size", "bound_height",
 			.["value"] = type
 
 		if(VV_MATRIX)
-			.["value"] = text2matrix(input("Enter a, b, c, d, e, and f, seperated by a space.", "Matrix", "1 0 0 0 1 0") as null|text)
+			.["value"] = text2matrix(input("Enter a, b, c, d, e, and f, separated by a space.", "Matrix", "1 0 0 0 1 0") as null|text)
 			if(.["value"] == null)
 				.["class"] = null
 				return
+
+		if(VV_REGEX)
+			var/reg = input("Enter regex", "Regex", "") as null|text
+			if(!reg)
+				return
+			.["value"] = regex(reg)
+			if(.["value"] == null)
+				.["class"] = null
 
 
 		if(VV_ATOM_REFERENCE)
@@ -182,9 +214,48 @@ var/list/VVpixelmovement = list("step_x", "step_y", "step_size", "bound_height",
 			.["value"] = things[value]
 
 
+		if(VV_VISIBLE_ATOM)
+			var/atom/clicked = prompt_for_atom_click("Click an atom.")
+			if(!clicked)
+				.["class"] = null
+				return
+			.["value"] = clicked
+		if(VV_INSIDE_VISIBLE_ATOM)
+			var/atom/clicked = prompt_for_atom_click("Click an atom to search inside.")
+			if(!clicked)
+				.["class"] = null
+				return
+
+			// Collect everything inside the atom.
+			var/list/ancestors = list(clicked)
+			var/list/descendants = list()
+			while(length(ancestors) > 0 && length(descendants) < 100)
+				var/atom/ancestor = ancestors[length(ancestors)]
+				ancestors.len--
+				for(var/atom/child in ancestor)
+					ancestors += child
+					descendants += child
+
+			// Prompt for which to pick.
+			var/descendant = input("Pick an atom:", "Inside a Visible Atom", src) in descendants
+			if(!descendant)
+				.["class"] = null
+				return
+			.["value"] = descendant
+		if(VV_VISIBLE_TURF)
+			var/atom/clicked = prompt_for_atom_click("Pick a turf (or any atom on it).")
+			if(!clicked)
+				.["class"] = null
+				return
+			var/turf/where = get_turf(clicked)
+			if(!where)
+				.["class"] = null
+				return
+			.["value"] = where
+
 
 		if(VV_CLIENT)
-			.["value"] = input("Select reference:", "Reference", current_value) as null|anything in clients
+			.["value"] = input("Select reference:", "Reference", current_value) as null|anything in GLOB.clients
 			if(.["value"] == null)
 				.["class"] = null
 				return
@@ -257,13 +328,13 @@ var/list/VVpixelmovement = list("step_x", "step_y", "step_size", "bound_height",
 //FALSE = no subtypes, strict exact type pathing (or the type doesn't have subtypes)
 //TRUE = Yes subtypes
 //NULL = User cancelled at the prompt or invalid type given
-/client/proc/vv_subtype_prompt(var/type)
+/client/proc/vv_subtype_prompt(type)
 	if(!ispath(type))
 		return
 	var/list/subtypes = subtypesof(type)
-	if(!subtypes || !subtypes.len)
+	if(!subtypes || !length(subtypes))
 		return FALSE
-	if(subtypes && subtypes.len)
+	if(subtypes && length(subtypes))
 		switch(alert("Strict object type detection?", "Type detection", "Strictly this type","This type and subtypes", "Cancel"))
 			if("Strictly this type")
 				return FALSE
@@ -295,11 +366,11 @@ var/list/VVpixelmovement = list("step_x", "step_y", "step_size", "bound_height",
 		//	the type with the base type removed from the begaining
 		var/fancytype = types[D.type]
 		if(findtext(fancytype, types[type]))
-			fancytype = copytext(fancytype, lentext(types[type])+1)
-		var/shorttype = copytext("[D.type]", lentext("[type]")+1)
-		if(lentext(shorttype) > lentext(fancytype))
+			fancytype = copytext(fancytype, length(types[type])+1)
+		var/shorttype = copytext("[D.type]", length("[type]")+1)
+		if(length(shorttype) > length(fancytype))
 			shorttype = fancytype
-		if(!lentext(shorttype))
+		if(!length(shorttype))
 			shorttype = "/"
 
 		.["[D]([shorttype])\ref[D]#[i]"] = D
@@ -335,16 +406,16 @@ var/list/VVpixelmovement = list("step_x", "step_y", "step_size", "bound_height",
 
 	L += var_value
 
-	switch(alert("Would you like to associate a value with the list entry?",,"Yes","No"))
+	switch(alert("Would you like to associate a value with the list entry?", null,"Yes","No"))
 		if("Yes")
 			L[var_value] = mod_list_add_ass(O) //hehe
 	if(O)
 		if(!O.vv_edit_var(objectvar, L))
-			to_chat(src, "Your edit was rejected by the object.")
+			to_chat(src, SPAN_WARNING("Your edit was rejected by the object."))
 			return
-	log_to_dd("### ListVarEdit by [src]: [(O ? O.type : "/list")] [objectvar]: ADDED=[var_value]")
+	log_world("### ListVarEdit by [src]: [(O ? O.type : "/list")] [objectvar]: ADDED=[var_value]")
 	log_admin("[key_name(src)] modified [original_name]'s [objectvar]: ADDED=[var_value]")
-	message_admins("[key_name_admin(src)] modified [original_name]'s [objectvar]: ADDED=[var_value]")
+	message_admins("[key_name_admin(src)] modified [original_name]'s [objectvar]: ADDED=[html_encode("[var_value]")]")
 
 /client/proc/mod_list(list/L, atom/O, original_name, objectvar, index, autodetect_class = FALSE)
 	if(!check_rights(R_VAREDIT))
@@ -353,7 +424,7 @@ var/list/VVpixelmovement = list("step_x", "step_y", "step_size", "bound_height",
 		to_chat(src, "Not a List.")
 		return
 
-	if(L.len > 1000)
+	if(length(L) > 1000)
 		var/confirm = alert(src, "The list you're trying to edit is very long, continuing may crash the server.", "Warning", "Continue", "Abort")
 		if(confirm != "Continue")
 			return
@@ -361,7 +432,7 @@ var/list/VVpixelmovement = list("step_x", "step_y", "step_size", "bound_height",
 
 
 	var/list/names = list()
-	for(var/i in 1 to L.len)
+	for(var/i in 1 to length(L))
 		var/key = L[i]
 		var/value
 		if(IS_NORMAL_LIST(L) && !isnum(key))
@@ -383,9 +454,9 @@ var/list/VVpixelmovement = list("step_x", "step_y", "step_size", "bound_height",
 			L = L.Copy()
 			listclearnulls(L)
 			if(!O.vv_edit_var(objectvar, L))
-				to_chat(src, "Your edit was rejected by the object.")
+				to_chat(src, SPAN_WARNING("Your edit was rejected by the object."))
 				return
-			log_to_dd("### ListVarEdit by [src]: [O.type] [objectvar]: CLEAR NULLS")
+			log_world("### ListVarEdit by [src]: [O.type] [objectvar]: CLEAR NULLS")
 			log_admin("[key_name(src)] modified [original_name]'s [objectvar]: CLEAR NULLS")
 			message_admins("[key_name_admin(src)] modified [original_name]'s list [objectvar]: CLEAR NULLS")
 			return
@@ -393,9 +464,9 @@ var/list/VVpixelmovement = list("step_x", "step_y", "step_size", "bound_height",
 		if(variable == "(CLEAR DUPES)")
 			L = uniqueList(L)
 			if(!O.vv_edit_var(objectvar, L))
-				to_chat(src, "Your edit was rejected by the object.")
+				to_chat(src, SPAN_WARNING("Your edit was rejected by the object."))
 				return
-			log_to_dd("### ListVarEdit by [src]: [O.type] [objectvar]: CLEAR DUPES")
+			log_world("### ListVarEdit by [src]: [O.type] [objectvar]: CLEAR DUPES")
 			log_admin("[key_name(src)] modified [original_name]'s [objectvar]: CLEAR DUPES")
 			message_admins("[key_name_admin(src)] modified [original_name]'s list [objectvar]: CLEAR DUPES")
 			return
@@ -403,9 +474,9 @@ var/list/VVpixelmovement = list("step_x", "step_y", "step_size", "bound_height",
 		if(variable == "(SHUFFLE)")
 			L = shuffle(L)
 			if(!O.vv_edit_var(objectvar, L))
-				to_chat(src, "Your edit was rejected by the object.")
+				to_chat(src, SPAN_WARNING("Your edit was rejected by the object."))
 				return
-			log_to_dd("### ListVarEdit by [src]: [O.type] [objectvar]: SHUFFLE")
+			log_world("### ListVarEdit by [src]: [O.type] [objectvar]: SHUFFLE")
 			log_admin("[key_name(src)] modified [original_name]'s [objectvar]: SHUFFLE")
 			message_admins("[key_name_admin(src)] modified [original_name]'s list [objectvar]: SHUFFLE")
 			return
@@ -430,7 +501,7 @@ var/list/VVpixelmovement = list("step_x", "step_y", "step_size", "bound_height",
 	else
 		variable = L[index]
 
-	default = vv_get_class(variable)
+	default = vv_get_class(objectvar, variable)
 
 	to_chat(src, "Variable appears to be <b>[uppertext(default)]</b>.")
 
@@ -480,11 +551,11 @@ var/list/VVpixelmovement = list("step_x", "step_y", "step_size", "bound_height",
 			L.Cut(index, index+1)
 			if(O)
 				if(!O.vv_edit_var(objectvar, L))
-					to_chat(src, "Your edit was rejected by the object.")
+					to_chat(src, SPAN_WARNING("Your edit was rejected by the object."))
 					return
-			log_to_dd("### ListVarEdit by [src]: [O.type] [objectvar]: REMOVED=[html_encode("[original_var]")]")
+			log_world("### ListVarEdit by [src]: [O.type] [objectvar]: REMOVED=[html_encode("[original_var]")]")
 			log_admin("[key_name(src)] modified [original_name]'s [objectvar]: REMOVED=[original_var]")
-			message_admins("[key_name_admin(src)] modified [original_name]'s [objectvar]: REMOVED=[original_var]")
+			message_admins("[key_name_admin(src)] modified [original_name]'s [objectvar]: REMOVED=[html_encode("[original_var]")]")
 			return
 
 		if(VV_TEXT)
@@ -499,11 +570,52 @@ var/list/VVpixelmovement = list("step_x", "step_y", "step_size", "bound_height",
 		L[index] = new_var
 	if(O)
 		if(!O.vv_edit_var(objectvar, L))
-			to_chat(src, "Your edit was rejected by the object.")
+			to_chat(src, SPAN_WARNING("Your edit was rejected by the object."))
 			return
-	log_to_dd("### ListVarEdit by [src]: [(O ? O.type : "/list")] [objectvar]: [original_var]=[new_var]")
+	log_world("### ListVarEdit by [src]: [(O ? O.type : "/list")] [objectvar]: [original_var]=[new_var]")
 	log_admin("[key_name(src)] modified [original_name]'s [objectvar]: [original_var]=[new_var]")
-	message_admins("[key_name_admin(src)] modified [original_name]'s varlist [objectvar]: [original_var]=[new_var]")
+	message_admins("[key_name_admin(src)] modified [original_name]'s varlist [objectvar]: [original_var]=[html_encode("[new_var]")]")
+
+/proc/vv_varname_lockcheck(param_var_name)
+	if(param_var_name in GLOB.VVlocked)
+		if(!check_rights(R_DEBUG))
+			return FALSE
+	if(param_var_name in GLOB.VVckey_edit)
+		if(!check_rights(R_EVENT | R_DEBUG))
+			return FALSE
+	if(param_var_name in GLOB.VVicon_edit_lock)
+		if(!check_rights(R_EVENT | R_DEBUG))
+			return FALSE
+	if(param_var_name in GLOB.VVpixelmovement)
+		if(!check_rights(R_DEBUG))
+			return FALSE
+		var/prompt = alert(usr, "Editing this var may irreparably break tile gliding for the rest of the round. THIS CAN'T BE UNDONE", "DANGER", "ABORT ", "Continue", " ABORT")
+		if(prompt != "Continue")
+			return FALSE
+	if(param_var_name in GLOB.VVmaint_only)
+		if(!check_rights(R_MAINTAINER))
+			alert(usr, "Editing this variable is restricted to Maintainers only.", "Error", "Ok")
+			return FALSE
+
+	return TRUE
+
+/datum/click_intercept/pick_atom
+	var/picked = null
+
+/datum/click_intercept/pick_atom/InterceptClickOn(user, params, atom/object)
+	picked = object
+
+/client/proc/prompt_for_atom_click(prompt = "Click something!")
+	to_chat(src, "<span class='notice big'>[prompt]</span>")
+	var/datum/click_intercept/pick_atom/picker = new(src)
+	while(isnull(picker.picked))
+		if(isnull(src) || click_intercept != picker)
+			return null
+		sleep(1)
+
+	picker.quit()
+	return picker.picked
+
 
 /client/proc/modify_variables(atom/O, param_var_name = null, autodetect_class = 0)
 	if(!check_rights(R_VAREDIT))
@@ -514,7 +626,7 @@ var/list/VVpixelmovement = list("step_x", "step_y", "step_size", "bound_height",
 	var/var_value
 
 	if(param_var_name)
-		if(!param_var_name in O.vars)
+		if(!(param_var_name in O.vars))
 			to_chat(src, "A variable with this name ([param_var_name]) doesn't exist in this datum ([O])")
 			return
 		variable = param_var_name
@@ -533,33 +645,19 @@ var/list/VVpixelmovement = list("step_x", "step_y", "step_size", "bound_height",
 	if(!O.can_vv_get(variable))
 		return
 
+	if(!vv_varname_lockcheck(variable))
+		return
+
 	var_value = O.vars[variable]
 
-	if(variable in VVlocked)
-		if(!check_rights(R_DEBUG))
-			return
-	if(variable in VVckey_edit)
-		if(!check_rights(R_EVENT | R_DEBUG))
-			return
-	if(variable in VVicon_edit_lock)
-		if(!check_rights(R_EVENT | R_DEBUG))
-			return
-	if(variable in VVpixelmovement)
-		if(!check_rights(R_DEBUG))
-			return
-		var/prompt = alert(src, "Editing this var may irreparably break tile gliding for the rest of the round. THIS CAN'T BE UNDONE", "DANGER", "ABORT ", "Continue", " ABORT")
-		if(prompt != "Continue")
-			return
-
-
-	var/default = vv_get_class(var_value)
+	var/default = vv_get_class(variable, var_value)
 
 	if(isnull(default))
 		to_chat(src, "Unable to determine variable type.")
 	else
 		to_chat(src, "Variable appears to be <b>[uppertext(default)]</b>.")
 
-	to_chat(src, "Variable contains: [var_value]")
+	to_chat(src, "Variable contains: [translate_bitfield(default, variable, var_value)]")
 
 	if(default == VV_NUM)
 		var/dir_text = ""
@@ -581,7 +679,7 @@ var/list/VVpixelmovement = list("step_x", "step_y", "step_size", "bound_height",
 			default = VV_MESSAGE
 		class = default
 
-	var/list/value = vv_get_value(class, default, var_value, extra_classes = list(VV_LIST))
+	var/list/value = vv_get_value(class, default, var_value, extra_classes = list(VV_LIST), var_name = variable)
 	class = value["class"]
 
 	if(!class)
@@ -610,9 +708,9 @@ var/list/VVpixelmovement = list("step_x", "step_y", "step_size", "bound_height",
 				var_new = replacetext(var_new,"\[[V]]","[O.vars[V]]")
 
 	if(!O.vv_edit_var(variable, var_new))
-		to_chat(src, "Your edit was rejected by the object.")
+		to_chat(src, SPAN_WARNING("Your edit was rejected by the object."))
 		return
-	log_to_dd("### VarEdit by [src]: [O.type] [variable]=[html_encode("[var_new]")]")
-	log_admin("[key_name(src)] modified [original_name]'s [variable] to [var_new]")
-	var/msg = "[key_name_admin(src)] modified [original_name]'s [variable] to [var_new]"
-	message_admins(msg)
+	SEND_GLOBAL_SIGNAL(COMSIG_GLOB_VAR_EDIT, args)
+	log_world("### VarEdit by [src]: [O.type] [variable]=[html_encode("[var_new]")] (Type: [class])")
+	log_admin("[key_name(src)] modified [original_name]'s [variable] to [var_new] (Type: [class])")
+	message_admins("[key_name_admin(src)] modified [original_name]'s [variable] to [html_encode(translate_bitfield(default, variable, var_new))] (Type: [class])")

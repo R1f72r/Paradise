@@ -1,85 +1,75 @@
-var/global/list/priority_air_alarms = list()
-var/global/list/minor_air_alarms = list()
-
-
 /obj/machinery/computer/atmos_alert
 	name = "atmospheric alert computer"
 	desc = "Used to access the station's atmospheric sensors."
-	circuit = /obj/item/weapon/circuitboard/atmos_alert
+	circuit = /obj/item/circuitboard/atmos_alert
 	icon_keyboard = "atmos_key"
 	icon_screen = "alert:0"
 	light_color = LIGHT_COLOR_CYAN
+	// List of alarms and their state in areas. This is sent to TGUI
+	var/list/alarm_cache
+	var/parent_area_type
 
-/obj/machinery/computer/atmos_alert/New()
-	..()
-	atmosphere_alarm.register(src, /obj/machinery/computer/station_alert/update_icon)
+/obj/machinery/computer/atmos_alert/Initialize(mapload)
+	. = ..()
+	alarm_cache = list()
+	alarm_cache["priority"] = list()
+	alarm_cache["minor"] = list()
+	alarm_cache["mode"] = list()
+	var/area/machine_area = get_area(src)
+	parent_area_type = machine_area.get_top_parent_type()
 
-/obj/machinery/computer/atmos_alert/Destroy()
-    atmosphere_alarm.unregister(src)
-    return ..()
+/obj/machinery/computer/atmos_alert/process()
+	alarm_cache = list()
+	alarm_cache["priority"] = list()
+	alarm_cache["minor"] = list()
+	alarm_cache["mode"] = list()
+	for(var/area/A in GLOB.all_areas)
+		if(!istype(A, parent_area_type))
+			continue
+		var/alarm_level = null
+		for(var/obj/machinery/alarm/air_alarm in A.air_alarms)
+			if(!istype(air_alarm))
+				continue
+			if(!air_alarm.report_danger_level)
+				continue
+			switch(air_alarm.alarm_area.atmosalm)
+				if(ATMOS_ALARM_DANGER)
+					alarm_level = "priority"
+				if(ATMOS_ALARM_WARNING)
+					if(isnull(alarm_level))
+						alarm_level = "minor"
+			if(!isnull(alarm_level))
+				alarm_cache[alarm_level] += A.name
+			if(air_alarm.mode != AALARM_MODE_FILTERING)
+				alarm_cache["mode"][A.name] = GLOB.aalarm_modes["[air_alarm.mode]"]
+
+	update_icon()
 
 /obj/machinery/computer/atmos_alert/attack_hand(mob/user)
 	ui_interact(user)
 
-/obj/machinery/computer/atmos_alert/ui_interact(mob/user, ui_key = "main", var/datum/nanoui/ui = null, var/force_open = 1)
-	ui = nanomanager.try_update_ui(user, src, ui_key, ui, force_open)
+/obj/machinery/computer/atmos_alert/ui_state(mob/user)
+	return GLOB.default_state
+
+/obj/machinery/computer/atmos_alert/ui_interact(mob/user, datum/tgui/ui = null)
+	ui = SStgui.try_update_ui(user, src, ui)
 	if(!ui)
-		ui = new(user, src, ui_key, "atmos_alert.tmpl", src.name, 500, 500)
+		ui = new(user, src, "AtmosAlertConsole", name)
 		ui.open()
-		ui.set_auto_update(1)
 
-/obj/machinery/computer/atmos_alert/ui_data(mob/user, datum/topic_state/state)
-	var/data[0]
-	var/major_alarms[0]
-	var/minor_alarms[0]
+/obj/machinery/computer/atmos_alert/ui_data(mob/user)
+	return alarm_cache
 
-	for(var/datum/alarm/alarm in atmosphere_alarm.major_alarms())
-		major_alarms[++major_alarms.len] = list("name" = sanitize(alarm.alarm_name()), "ref" = "\ref[alarm]")
+/obj/machinery/computer/atmos_alert/update_icon_state()
+	if(!length(alarm_cache)) // This happens if were mid init
+		icon_screen = "alert:0"
+		return ..()
 
-	for(var/datum/alarm/alarm in atmosphere_alarm.minor_alarms())
-		minor_alarms[++minor_alarms.len] = list("name" = sanitize(alarm.alarm_name()), "ref" = "\ref[alarm]")
 
-	data["priority_alarms"] = major_alarms
-	data["minor_alarms"] = minor_alarms
-
-	return data
-
-/obj/machinery/computer/atmos_alert/update_icon()
-	var/list/alarms = atmosphere_alarm.major_alarms()
-	if(alarms.len)
+	if(length(alarm_cache["priority"]))
 		icon_screen = "alert:2"
+	else if(length(alarm_cache["minor"]))
+		icon_screen = "alert:1"
 	else
-		alarms = atmosphere_alarm.minor_alarms()
-		if(alarms.len)
-			icon_screen = "alert:1"
-		else
-			icon_screen = "alert:0"
+		icon_screen = "alert:0"
 	..()
-
-/obj/machinery/computer/atmos_alert/Topic(href, href_list)
-	if(..())
-		return 1
-
-	if(href_list["clear_alarm"])
-		var/datum/alarm/alarm = locate(href_list["clear_alarm"]) in atmosphere_alarm.alarms
-		if(alarm)
-			for(var/datum/alarm_source/alarm_source in alarm.sources)
-				var/obj/machinery/alarm/air_alarm = alarm_source.source
-				if(istype(air_alarm))
-					var/list/new_ref = list("atmos_reset" = 1)
-					air_alarm.Topic(href, new_ref, state = air_alarm_topic)
-					update_icon()
-		return 1
-
-
-var/datum/topic_state/air_alarm_topic/air_alarm_topic = new()
-
-/datum/topic_state/air_alarm_topic/href_list(var/mob/user)
-	var/list/extra_href = list()
-	extra_href["remote_connection"] = 1
-	extra_href["remote_access"] = 1
-
-	return extra_href
-
-/datum/topic_state/air_alarm_topic/can_use_topic(var/src_object, var/mob/user)
-	return STATUS_INTERACTIVE

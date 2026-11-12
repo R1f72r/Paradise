@@ -4,91 +4,39 @@
 * @author N3X15 <nexisentertainment@gmail.com>
 */
 
-// What each index means:
-#define DNA_OFF_LOWERBOUND 1		// changed as lists start at 1 not 0
-#define DNA_OFF_UPPERBOUND 2
-#define DNA_ON_LOWERBOUND  3
-#define DNA_ON_UPPERBOUND  4
-
-// Define block bounds (off-low,off-high,on-low,on-high)
-// Used in setupgame.dm
-#define DNA_DEFAULT_BOUNDS list(1,2049,2050,4095)
-#define DNA_HARDER_BOUNDS  list(1,3049,3050,4095)
-#define DNA_HARD_BOUNDS    list(1,3490,3500,4095)
-
-// UI Indices (can change to mutblock style, if desired)
-#define DNA_UI_HAIR_R		1
-#define DNA_UI_HAIR_G		2
-#define DNA_UI_HAIR_B		3
-#define DNA_UI_HAIR2_R		4
-#define DNA_UI_HAIR2_G		5
-#define DNA_UI_HAIR2_B		6
-#define DNA_UI_BEARD_R		7
-#define DNA_UI_BEARD_G		8
-#define DNA_UI_BEARD_B		9
-#define DNA_UI_BEARD2_R		10
-#define DNA_UI_BEARD2_G		11
-#define DNA_UI_BEARD2_B		12
-#define DNA_UI_SKIN_TONE	13
-#define DNA_UI_SKIN_R		14
-#define DNA_UI_SKIN_G		15
-#define DNA_UI_SKIN_B		16
-#define DNA_UI_HACC_R		17
-#define DNA_UI_HACC_G		18
-#define DNA_UI_HACC_B		19
-#define DNA_UI_HEAD_MARK_R	20
-#define DNA_UI_HEAD_MARK_G	21
-#define DNA_UI_HEAD_MARK_B	22
-#define DNA_UI_BODY_MARK_R	23
-#define DNA_UI_BODY_MARK_G	24
-#define DNA_UI_BODY_MARK_B	25
-#define DNA_UI_TAIL_MARK_R	26
-#define DNA_UI_TAIL_MARK_G	27
-#define DNA_UI_TAIL_MARK_B	28
-#define DNA_UI_EYES_R		29
-#define DNA_UI_EYES_G		30
-#define DNA_UI_EYES_B		31
-#define DNA_UI_GENDER		32
-#define DNA_UI_BEARD_STYLE	33
-#define DNA_UI_HAIR_STYLE	34
-/*#define DNA_UI_BACC_STYLE	23*/
-#define DNA_UI_HACC_STYLE	35
-#define DNA_UI_HEAD_MARK_STYLE	36
-#define DNA_UI_BODY_MARK_STYLE	37
-#define DNA_UI_TAIL_MARK_STYLE	38
-#define DNA_UI_LENGTH		38 // Update this when you add something, or you WILL break shit.
-
-#define DNA_SE_LENGTH 55 // Was STRUCDNASIZE, size 27. 15 new blocks added = 42, plus room to grow.
-
 // Defines which values mean "on" or "off".
 //  This is to make some of the more OP superpowers a larger PITA to activate,
 //  and to tell our new DNA datum which values to set in order to turn something
 //  on or off.
-var/global/list/dna_activity_bounds[DNA_SE_LENGTH]
-var/global/list/assigned_gene_blocks[DNA_SE_LENGTH]
+GLOBAL_LIST_INIT(dna_activity_bounds, new(DNA_SE_LENGTH))
+GLOBAL_LIST_INIT(assigned_mutation_blocks, new(DNA_SE_LENGTH))
 
 // Used to determine what each block means (admin hax and species stuff on /vg/, mostly)
-var/global/list/assigned_blocks[DNA_SE_LENGTH]
+GLOBAL_LIST_INIT(assigned_blocks, new(DNA_SE_LENGTH))
 
-var/global/list/datum/dna/gene/dna_genes[0]
+/// Assoc list. Key = type of the mutation, value = the mutation
+GLOBAL_LIST_EMPTY(dna_mutations)
 
-var/global/list/good_blocks[0]
-var/global/list/bad_blocks[0]
+GLOBAL_LIST_EMPTY(good_blocks)
+GLOBAL_LIST_EMPTY(bad_blocks)
 
 /datum/dna
 	// READ-ONLY, GETS OVERWRITTEN
 	// DO NOT FUCK WITH THESE OR BYOND WILL EAT YOUR FACE
-	var/uni_identity="" // Encoded UI
-	var/struc_enzymes="" // Encoded SE
-	var/unique_enzymes="" // MD5 of player name
+	/// Encoded UI
+	var/uni_identity = ""
+	/// Encoded SE
+	var/struc_enzymes = ""
+	/// MD5 of player name
+	var/unique_enzymes = ""
 
 	// Original Encoded SE, for use with Ryetalin
-	var/struc_enzymes_original="" // Encoded SE
+	var/struc_enzymes_original = "" // Encoded SE
 	var/list/SE_original[DNA_SE_LENGTH]
 
 	// Internal dirtiness checks
-	var/dirtyUI=0
-	var/dirtySE=0
+	var/dirtyUI = 0
+	var/dirtySE = 0
 
 	// Okay to read, but you're an idiot if you do.
 	// BLOCK = VALUE
@@ -96,25 +44,51 @@ var/global/list/bad_blocks[0]
 	var/list/UI[DNA_UI_LENGTH]
 
 	// From old dna.
-	var/b_type = "A+"  // Should probably change to an integer => string map but I'm lazy.
-	var/real_name          // Stores the real name of the person who originally got this dna datum. Used primarily for changelings,
-
-	// New stuff
-	var/species = "Human"
+	/// The blood type of the mob.
+	var/blood_type = "A+"
+	/// Stores the real name of the person who originally got this dna datum. Used primarily for changelings,
+	var/real_name
+	/// The type of mutant race the player is if applicable (i.e. potato-man)
+	var/datum/species/species = new /datum/species/human
+	/// list of all blocks toggled at roundstart
+	var/list/default_blocks = list()
+	/// The flavor text of the person. We store this here for polymorph and changelings.
+	var/flavor_text
+	/// The chat color to load for when a character is cloned, a changeling transforms, or when a character is created
+	var/chat_color
+	/// The blooper data to load for when a character is cloned, a changeling transforms, or when a character is created
+	var/blooper_id
+	/// The speed of a blooper, which changes delays per sound.
+	var/blooper_speed = BLOOPER_SPEED_BASELINE
+	/// The base pitch of a blooper before variance.
+	var/blooper_pitch = 1
+	/// The Additional +/- pitch, modifies default pitch with the range in positive and negative directions.
+	var/blooper_pitch_range = 0.5
 
 // Make a copy of this strand.
 // USE THIS WHEN COPYING STUFF OR YOU'LL GET CORRUPTION!
 /datum/dna/proc/Clone()
 	var/datum/dna/new_dna = new()
-	new_dna.unique_enzymes=unique_enzymes
-	new_dna.struc_enzymes_original=struc_enzymes_original // will make clone's SE the same as the original, do we want this?
-	new_dna.b_type=b_type
-	new_dna.real_name=real_name
-	new_dna.species=species
-	for(var/b=1;b<=DNA_SE_LENGTH;b++)
+	new_dna.unique_enzymes = unique_enzymes
+	new_dna.struc_enzymes_original = struc_enzymes_original // will make clone's SE the same as the original, do we want this?
+	new_dna.default_blocks = default_blocks
+	new_dna.blood_type = blood_type
+	new_dna.real_name = real_name
+	new_dna.species = new species.type
+	new_dna.flavor_text = flavor_text
+	new_dna.chat_color = chat_color
+	new_dna.blooper_id = blooper_id
+	new_dna.blooper_speed = blooper_speed
+	new_dna.blooper_pitch = blooper_pitch
+	new_dna.blooper_pitch_range = blooper_pitch_range
+
+	for(var/b = 1; b <= DNA_SE_LENGTH; b++)
 		new_dna.SE[b]=SE[b]
-		if(b<=DNA_UI_LENGTH)
-			new_dna.UI[b]=UI[b]
+		if(b <= DNA_UI_LENGTH)
+			if(b <= length(UI)) //We check index against the length of UI provided, because it may be shorter and thus be out of bounds
+				new_dna.UI[b]=UI[b]
+				continue
+			new_dna.UI[b] = 0
 	new_dna.UpdateUI()
 	new_dna.UpdateSE()
 	return new_dna
@@ -124,24 +98,23 @@ var/global/list/bad_blocks[0]
 ///////////////////////////////////////
 
 // Create random UI.
-/datum/dna/proc/ResetUI(var/defer=0)
+/datum/dna/proc/ResetUI(defer = FALSE)
 	for(var/i=1,i<=DNA_UI_LENGTH,i++)
 		switch(i)
 			if(DNA_UI_SKIN_TONE)
-				SetUIValueRange(DNA_UI_SKIN_TONE,rand(1,220),220,1) // Otherwise, it gets fucked
+				SetUIValueRange(DNA_UI_SKIN_TONE, rand(1, 220), 220, 1) // Otherwise, it gets fucked
 			else
 				UI[i]=rand(0,4095)
 	if(!defer)
 		UpdateUI()
 
-/datum/dna/proc/ResetUIFrom(var/mob/living/carbon/human/character)
+/datum/dna/proc/ResetUIFrom(mob/living/carbon/human/character)
 	// INITIALIZE!
-	ResetUI(1)
+	ResetUI(TRUE)
 	// Hair
 	// FIXME:  Species-specific defaults pls
-	var/obj/item/organ/external/head/H = character.get_organ("head")
+	var/obj/item/organ/external/head/head = character.get_organ("head")
 	var/obj/item/organ/internal/eyes/eyes_organ = character.get_int_organ(/obj/item/organ/internal/eyes)
-	var/datum/species/S = character.species
 
 	/*// Body Accessory
 	if(!character.body_accessory)
@@ -152,122 +125,185 @@ var/global/list/bad_blocks[0]
 	if(!character.m_styles)
 		character.m_styles = DEFAULT_MARKING_STYLES
 
-	var/head_marks	= marking_styles_list.Find(character.m_styles["head"])
-	var/body_marks	= marking_styles_list.Find(character.m_styles["body"])
-	var/tail_marks	= marking_styles_list.Find(character.m_styles["tail"])
+	var/head_marks	= GLOB.marking_styles_list.Find(character.m_styles["head"])
+	var/body_marks	= GLOB.marking_styles_list.Find(character.m_styles["body"])
+	var/tail_marks	= GLOB.marking_styles_list.Find(character.m_styles["tail"])
 
-	head_traits_to_dna(H)
+	head_traits_to_dna(character, head)
 	eye_color_to_dna(eyes_organ)
 
-	SetUIValueRange(DNA_UI_SKIN_R,		color2R(character.skin_colour),			255,	1)
-	SetUIValueRange(DNA_UI_SKIN_G,		color2G(character.skin_colour),			255,	1)
-	SetUIValueRange(DNA_UI_SKIN_B,		color2B(character.skin_colour),			255,	1)
+	SetUIValueRange(DNA_UI_SKIN_R,		color2R(character.skin_colour),			255,	TRUE)
+	SetUIValueRange(DNA_UI_SKIN_G,		color2G(character.skin_colour),			255,	TRUE)
+	SetUIValueRange(DNA_UI_SKIN_B,		color2B(character.skin_colour),			255,	TRUE)
 
-	SetUIValueRange(DNA_UI_HEAD_MARK_R,	color2R(character.m_colours["head"]),	255,	1)
-	SetUIValueRange(DNA_UI_HEAD_MARK_G,	color2G(character.m_colours["head"]),	255,	1)
-	SetUIValueRange(DNA_UI_HEAD_MARK_B,	color2B(character.m_colours["head"]),	255,	1)
+	SetUIValueRange(DNA_UI_HEAD_MARK_R,	color2R(character.m_colours["head"]),	255,	TRUE)
+	SetUIValueRange(DNA_UI_HEAD_MARK_G,	color2G(character.m_colours["head"]),	255,	TRUE)
+	SetUIValueRange(DNA_UI_HEAD_MARK_B,	color2B(character.m_colours["head"]),	255,	TRUE)
 
-	SetUIValueRange(DNA_UI_BODY_MARK_R,	color2R(character.m_colours["body"]),	255,	1)
-	SetUIValueRange(DNA_UI_BODY_MARK_G,	color2G(character.m_colours["body"]),	255,	1)
-	SetUIValueRange(DNA_UI_BODY_MARK_B,	color2B(character.m_colours["body"]),	255,	1)
+	SetUIValueRange(DNA_UI_BODY_MARK_R,	color2R(character.m_colours["body"]),	255,	TRUE)
+	SetUIValueRange(DNA_UI_BODY_MARK_G,	color2G(character.m_colours["body"]),	255,	TRUE)
+	SetUIValueRange(DNA_UI_BODY_MARK_B,	color2B(character.m_colours["body"]),	255,	TRUE)
 
-	SetUIValueRange(DNA_UI_TAIL_MARK_R,	color2R(character.m_colours["tail"]),	255,	1)
-	SetUIValueRange(DNA_UI_TAIL_MARK_G,	color2G(character.m_colours["tail"]),	255,	1)
-	SetUIValueRange(DNA_UI_TAIL_MARK_B,	color2B(character.m_colours["tail"]),	255,	1)
+	SetUIValueRange(DNA_UI_TAIL_MARK_R,	color2R(character.m_colours["tail"]),	255,	TRUE)
+	SetUIValueRange(DNA_UI_TAIL_MARK_G,	color2G(character.m_colours["tail"]),	255,	TRUE)
+	SetUIValueRange(DNA_UI_TAIL_MARK_B,	color2B(character.m_colours["tail"]),	255,	TRUE)
 
-	SetUIValueRange(DNA_UI_SKIN_TONE,	35-character.s_tone,	220,	1) // Value can be negative.
+	SetUIValueRange(DNA_UI_SKIN_TONE, abs(35 - character.s_tone),	220,	TRUE)
 
-	if(S.has_gender)
-		SetUIState(DNA_UI_GENDER, character.gender!=MALE, 1)
-	else
-		SetUIState(DNA_UI_GENDER, pick(0,1), 1)
+	SetUIValueRange(DNA_UI_HEAD_MARK_STYLE,	head_marks,	length(GLOB.marking_styles_list),		TRUE)
+	SetUIValueRange(DNA_UI_BODY_MARK_STYLE,	body_marks,	length(GLOB.marking_styles_list),		TRUE)
+	SetUIValueRange(DNA_UI_TAIL_MARK_STYLE,	tail_marks,	length(GLOB.marking_styles_list),		TRUE)
 
-	/*SetUIValueRange(DNA_UI_BACC_STYLE,	bodyacc,	facial_hair_styles_list.len,	1)*/
-	SetUIValueRange(DNA_UI_HEAD_MARK_STYLE,	head_marks,		marking_styles_list.len,		1)
-	SetUIValueRange(DNA_UI_BODY_MARK_STYLE,	body_marks,		marking_styles_list.len,		1)
-	SetUIValueRange(DNA_UI_TAIL_MARK_STYLE,	tail_marks,		marking_styles_list.len,		1)
+	SetUIValueRange(DNA_UI_PHYSIQUE, GLOB.character_physiques.Find(character.physique), length(GLOB.character_physiques), TRUE)
+	SetUIValueRange(DNA_UI_HEIGHT, GLOB.character_heights.Find(character.height), length(GLOB.character_heights), TRUE)
 
+	SetUIValueRange(DNA_UI_BLOOPER_ID, GLOB.blooper_list.Find(character.blooper_id), length(GLOB.blooper_list), 1)
+	SetUIValueRange(DNA_UI_BLOOPER_SPEED, character.blooper_speed, BLOOPER_DEFAULT_MAXSPEED, 1)
+	SetUIValueRange(DNA_UI_BLOOPER_PITCH, character.blooper_pitch, BLOOPER_DEFAULT_MAXPITCH, 1)
+	SetUIValueRange(DNA_UI_BLOOPER_PITCH_RANGE, character.blooper_pitch_range, BLOOPER_DEFAULT_MAXVARY, 1)
+
+
+	var/list/bodyacc = GLOB.body_accessory_by_name.Find(character.body_accessory?.name || "None")
+	SetUIValueRange(DNA_UI_BACC_STYLE, bodyacc, length(GLOB.body_accessory_by_name), TRUE)
+
+	switch(character.body_type)
+		if(FEMALE)
+			SetUIState(DNA_UI_BODY_TYPE, DNA_GENDER_FEMALE, TRUE)
+		if(MALE)
+			SetUIState(DNA_UI_BODY_TYPE, DNA_GENDER_MALE, TRUE)
+
+	//Set the Gender
+	switch(character.gender)
+		if(FEMALE)
+			SetUITriState(DNA_UI_GENDER, DNA_GENDER_FEMALE, TRUE)
+		if(MALE)
+			SetUITriState(DNA_UI_GENDER, DNA_GENDER_MALE, TRUE)
+		if(PLURAL)
+			SetUITriState(DNA_UI_GENDER, DNA_GENDER_PLURAL, TRUE)
+
+	// updates DNA for our external and internal organs
+	for(var/obj/item/organ/organ in (character.bodyparts + character.internal_organs))
+		organ.dna.UI = character.dna.UI
 
 	UpdateUI()
 
 // Set a DNA UI block's raw value.
-/datum/dna/proc/SetUIValue(var/block,var/value,var/defer=0)
-	if(block<=0) return
-	ASSERT(value>0)
-	ASSERT(value<=4095)
+/datum/dna/proc/SetUIValue(block, value, defer = FALSE)
+	if(block <= 0)
+		return
+	ASSERT(value > 0)
+	ASSERT(value <= 4095)
 	UI[block]=value
-	dirtyUI=1
+	dirtyUI = 1
 	if(!defer)
 		UpdateUI()
 
 // Get a DNA UI block's raw value.
-/datum/dna/proc/GetUIValue(var/block)
-	if(block<=0) return 0
+/datum/dna/proc/GetUIValue(block)
+	if(block <= 0)
+		return FALSE
+	if(block >= length(UI))
+		return FALSE
 	return UI[block]
 
 // Set a DNA UI block's value, given a value and a max possible value.
 // Used in hair and facial styles (value being the index and maxvalue being the len of the hairstyle list)
-/datum/dna/proc/SetUIValueRange(var/block,var/value,var/maxvalue,var/defer=0)
-	if(block<=0)
+/datum/dna/proc/SetUIValueRange(block, value, maxvalue, defer = FALSE)
+	if(block <= 0)
 		return
 	if(value == 0)
 		value = 1
-	ASSERT(maxvalue<=4095)
+	ASSERT(maxvalue <= 4095)
 	var/range = (4095 / maxvalue)
 	if(value)
-		SetUIValue(block,round(value * range),defer)
+		SetUIValue(block,round(value * range), defer)
 
 // Getter version of above.
-/datum/dna/proc/GetUIValueRange(var/block,var/maxvalue)
-	if(block<=0) return 0
+/datum/dna/proc/GetUIValueRange(block, maxvalue)
+	if(block <= 0)
+		return FALSE
 	var/value = GetUIValue(block)
-	return round(1 +(value / 4096)*maxvalue)
+	return round(1 + (value / 4096) * maxvalue)
 
-// Is the UI gene "on" or "off"?
+// Is the UI mutation "on" or "off"?
 // For UI, this is simply a check of if the value is > 2050.
-/datum/dna/proc/GetUIState(var/block)
-	if(block<=0) return
+/datum/dna/proc/GetUIState(block)
+	if(block <= 0)
+		return
 	return UI[block] > 2050
 
 
-// Set UI gene "on" (1) or "off" (0)
-/datum/dna/proc/SetUIState(var/block,var/on,var/defer=0)
-	if(block<=0) return
+// Set UI mutation "on" (1) or "off" (0)
+/datum/dna/proc/SetUIState(block, on, defer = FALSE)
+	if(block <= 0)
+		return
 	var/val
 	if(on)
-		val=rand(2050,4095)
+		val = rand(2050, 4095)
 	else
-		val=rand(1,2049)
-	SetUIValue(block,val,defer)
+		val=rand(1, 2049)
+	SetUIValue(block, val, defer)
+
+//Get Tri State Block State
+/datum/dna/proc/GetUITriState(block)
+	if(block <= 0)
+		return
+	var/val = GetUIValue(block)
+	switch(val)
+		if(1 to 1395)
+			return 0
+		if(1396 to 2760)
+			return 1
+		if(2761 to 4095)
+			return 2
+
+// Set Trinary UI Block State
+/datum/dna/proc/SetUITriState(block, value, defer = FALSE)
+	if(block <= 0)
+		return
+	ASSERT(value >= 0)
+	ASSERT(value <= 2)
+	var/val
+	switch(value)
+		if(0)
+			val = rand(1, 1395)
+		if(1)
+			val = rand(1396, 2760)
+		if(2)
+			val = rand(2761, 4095)
+	SetUIValue(block, val, defer)
+
 
 // Get a hex-encoded UI block.
-/datum/dna/proc/GetUIBlock(var/block)
-	return EncodeDNABlock(GetUIValue(block))
+/datum/dna/proc/GetUIBlock(block)
+	return ENCODE_DNA_BLOCK(GetUIValue(block))
 
 // Do not use this unless you absolutely have to.
 // Set a block from a hex string.  This is inefficient.  If you can, use SetUIValue().
 // Used in DNA modifiers.
-/datum/dna/proc/SetUIBlock(var/block,var/value,var/defer=0)
-	if(block<=0) return
-	return SetUIValue(block,hex2num(value),defer)
+/datum/dna/proc/SetUIBlock(block, value, defer = FALSE)
+	if(block <= 0)
+		return
+	return SetUIValue(block, hex2num(value), defer)
 
 // Get a sub-block from a block.
-/datum/dna/proc/GetUISubBlock(var/block,var/subBlock)
-	return copytext(GetUIBlock(block),subBlock,subBlock+1)
+/datum/dna/proc/GetUISubBlock(block, subBlock)
+	return copytext(GetUIBlock(block), subBlock, subBlock + 1)
 
 // Do not use this unless you absolutely have to.
 // Set a block from a hex string.  This is inefficient.  If you can, use SetUIValue().
 // Used in DNA modifiers.
-/datum/dna/proc/SetUISubBlock(var/block,var/subBlock, var/newSubBlock, var/defer=0)
-	if(block<=0) return
-	var/oldBlock=GetUIBlock(block)
-	var/newBlock=""
-	for(var/i=1, i<=length(oldBlock), i++)
+/datum/dna/proc/SetUISubBlock(block, subBlock, newSubBlock, defer = FALSE)
+	if(block <= 0)
+		return
+	var/oldBlock = GetUIBlock(block)
+	var/newBlock = ""
+	for(var/i = 1, i <= length(oldBlock), i++)
 		if(i==subBlock)
-			newBlock+=newSubBlock
+			newBlock += newSubBlock
 		else
-			newBlock+=copytext(oldBlock,i,i+1)
-	SetUIBlock(block,newBlock,defer)
+			newBlock += copytext(oldBlock, i, i + 1)
+	SetUIBlock(block, newBlock, defer)
 
 ///////////////////////////////////////
 // STRUCTURAL ENZYMES
@@ -276,126 +312,134 @@ var/global/list/bad_blocks[0]
 // "Zeroes out" all of the blocks.
 /datum/dna/proc/ResetSE()
 	for(var/i = 1, i <= DNA_SE_LENGTH, i++)
-		SetSEValue(i,rand(1,1024),1)
+		SetSEValue(i, rand(1, 1024), 1)
 	UpdateSE()
 
 // Set a DNA SE block's raw value.
-/datum/dna/proc/SetSEValue(var/block,var/value,var/defer=0)
+/datum/dna/proc/SetSEValue(block, value, defer = FALSE)
 
-	if(block<=0) return
-	ASSERT(value>=0)
-	ASSERT(value<=4095)
-	SE[block]=value
-	dirtySE=1
+	if(block<=0)
+		return
+	ASSERT(value >= 0)
+	ASSERT(value <= 4095)
+	SE[block] = value
+	dirtySE = 1
 	if(!defer)
 		UpdateSE()
 	//testing("SetSEBlock([block],[value],[defer]): [value] -> [GetSEValue(block)]")
 
 // Get a DNA SE block's raw value.
-/datum/dna/proc/GetSEValue(var/block)
-	if(block<=0) return 0
+/datum/dna/proc/GetSEValue(block)
+	if(block <= 0)
+		return FALSE
 	return SE[block]
 
 // Set a DNA SE block's value, given a value and a max possible value.
 // Might be used for species?
-/datum/dna/proc/SetSEValueRange(var/block,var/value,var/maxvalue)
-	if(block<=0) return
-	ASSERT(maxvalue<=4095)
+/datum/dna/proc/SetSEValueRange(block, value, maxvalue)
+	if(block <= 0)
+		return
+	ASSERT(maxvalue <= 4095)
 	var/range = round(4095 / maxvalue)
 	if(value)
-		SetSEValue(block, value * range - rand(1,range-1))
+		SetSEValue(block, value * range - rand(1, range - 1))
 
 // Getter version of above.
-/datum/dna/proc/GetSEValueRange(var/block,var/maxvalue)
-	if(block<=0) return 0
+/datum/dna/proc/GetSEValueRange(block, maxvalue)
+	if(block <= 0)
+		return FALSE
 	var/value = GetSEValue(block)
-	return round(1 +(value / 4096)*maxvalue)
+	return round(1 + (value / 4096) * maxvalue)
 
-// Is the block "on" (1) or "off" (0)? (Un-assigned genes are always off.)
-/datum/dna/proc/GetSEState(var/block)
-	if(block<=0) return 0
-	var/list/BOUNDS=GetDNABounds(block)
-	var/value=GetSEValue(block)
+// Is the block "on" (1) or "off" (0)? (Un-assigned mutations are always off.)
+/datum/dna/proc/GetSEState(block)
+	if(block <= 0)
+		return FALSE
+	var/list/BOUNDS = GetDNABounds(block)
+	var/value = GetSEValue(block)
 	return (value >= BOUNDS[DNA_ON_LOWERBOUND])
 
 // Set a block "on" or "off".
-/datum/dna/proc/SetSEState(var/block,var/on,var/defer=0)
-	if(block<=0) return
+/datum/dna/proc/SetSEState(block, on, defer = FALSE)
+	if(block <= 0)
+		return
 	var/list/BOUNDS=GetDNABounds(block)
 	var/val
 	if(on)
-		val=rand(BOUNDS[DNA_ON_LOWERBOUND],BOUNDS[DNA_ON_UPPERBOUND])
+		val = rand(BOUNDS[DNA_ON_LOWERBOUND], BOUNDS[DNA_ON_UPPERBOUND])
 	else
-		val=rand(1,BOUNDS[DNA_OFF_UPPERBOUND])
-	SetSEValue(block,val,defer)
+		val = rand(1, BOUNDS[DNA_OFF_UPPERBOUND])
+	SetSEValue(block, val, defer)
 
 // Get hex-encoded SE block.
-/datum/dna/proc/GetSEBlock(var/block)
-	return EncodeDNABlock(GetSEValue(block))
+/datum/dna/proc/GetSEBlock(block)
+	return ENCODE_DNA_BLOCK(GetSEValue(block))
 
 // Do not use this unless you absolutely have to.
 // Set a block from a hex string.  This is inefficient.  If you can, use SetUIValue().
 // Used in DNA modifiers.
-/datum/dna/proc/SetSEBlock(var/block,var/value,var/defer=0)
-	if(block<=0) return
+/datum/dna/proc/SetSEBlock(block, value, defer = FALSE)
+	if(block <= 0)
+		return
 	var/nval=hex2num(value)
 	//testing("SetSEBlock([block],[value],[defer]): [value] -> [nval]")
-	return SetSEValue(block,nval,defer)
+	return SetSEValue(block, nval, defer)
 
-/datum/dna/proc/GetSESubBlock(var/block,var/subBlock)
-	return copytext(GetSEBlock(block),subBlock,subBlock+1)
+/datum/dna/proc/GetSESubBlock(block, subBlock)
+	return copytext(GetSEBlock(block), subBlock, subBlock + 1)
 
 // Do not use this unless you absolutely have to.
 // Set a sub-block from a hex character.  This is inefficient.  If you can, use SetUIValue().
 // Used in DNA modifiers.
-/datum/dna/proc/SetSESubBlock(var/block,var/subBlock, var/newSubBlock, var/defer=0)
-	if(block<=0) return
+/datum/dna/proc/SetSESubBlock(block, subBlock, newSubBlock, defer = FALSE)
+	if(block <= 0)
+		return
 	var/oldBlock=GetSEBlock(block)
-	var/newBlock=""
-	for(var/i=1, i<=length(oldBlock), i++)
+	var/newBlock = ""
+	for(var/i = 1, i <= length(oldBlock), i++)
 		if(i==subBlock)
 			newBlock+=newSubBlock
 		else
-			newBlock+=copytext(oldBlock,i,i+1)
+			newBlock += copytext(oldBlock, i, i + 1)
 	//testing("SetSESubBlock([block],[subBlock],[newSubBlock],[defer]): [oldBlock] -> [newBlock]")
-	SetSEBlock(block,newBlock,defer)
-
-
-/proc/EncodeDNABlock(var/value)
-	return add_zero2(num2hex(value,1), 3)
+	SetSEBlock(block, newBlock, defer)
 
 /datum/dna/proc/UpdateUI()
-	src.uni_identity=""
+	var/list/ui_text_list = list()
+	uni_identity = ""
 	for(var/block in UI)
-		uni_identity += EncodeDNABlock(block)
+		ui_text_list += ENCODE_DNA_BLOCK(block)
+	uni_identity = ui_text_list.Join("")
 	//testing("New UI: [uni_identity]")
-	dirtyUI=0
+	dirtyUI = 0
 
 /datum/dna/proc/UpdateSE()
 	//var/oldse=struc_enzymes
-	struc_enzymes=""
+	var/list/se_text_list = list()
+	struc_enzymes = ""
 	for(var/block in SE)
-		struc_enzymes += EncodeDNABlock(block)
+		se_text_list += ENCODE_DNA_BLOCK(block)
+	struc_enzymes = se_text_list.Join("")
 	//testing("Old SE: [oldse]")
 	//testing("New SE: [struc_enzymes]")
-	dirtySE=0
+	dirtySE = 0
 
 // BACK-COMPAT!
 //  Just checks our character has all the crap it needs.
-/datum/dna/proc/check_integrity(var/mob/living/carbon/human/character)
+/datum/dna/proc/check_integrity(mob/living/carbon/human/character)
 	if(character)
-		if(UI.len != DNA_UI_LENGTH)
+		if(length(UI) != DNA_UI_LENGTH)
 			ResetUIFrom(character)
 
-		if(length(struc_enzymes)!= 3*DNA_SE_LENGTH)
+		if(length(struc_enzymes)!= 3 * DNA_SE_LENGTH)
 			ResetSE()
 
 		if(length(unique_enzymes) != 32)
 			unique_enzymes = md5(character.real_name)
 	else
-		if(length(uni_identity) != 3*DNA_UI_LENGTH)
+		if(length(uni_identity) != 3 * DNA_UI_LENGTH)
 			uni_identity = "00600200A00E0110148FC01300B0095BD7FD3F4"
-		if(length(struc_enzymes)!= 3*DNA_SE_LENGTH)
+		if(length(struc_enzymes)!= 3 * DNA_SE_LENGTH)
 			struc_enzymes = "43359156756131E13763334D1C369012032164D4FE4CD61544B6C03F251B6C60A42821D26BA3B0FD6"
 
 // BACK-COMPAT!
@@ -413,7 +457,6 @@ var/global/list/bad_blocks[0]
 	SE_original = SE.Copy()
 
 	unique_enzymes = md5(character.real_name)
-	reg_dna[unique_enzymes] = character.real_name
 
 // Hmm, I wonder how to go about this without a huge convention break
 /datum/dna/serialize()
@@ -421,10 +464,11 @@ var/global/list/bad_blocks[0]
 	data["UE"] = unique_enzymes
 	data["SE"] = SE.Copy() // This is probably too lazy for my own good
 	data["UI"] = UI.Copy()
-	data["species"] = species // This works because `species` is a string, not a datum
+	data["species"] = species.type
 	// Because old DNA coders were insane or something
-	data["b_type"] = b_type
+	data["blood_type"] = blood_type
 	data["real_name"] = real_name
+	data["flavor_text"] = flavor_text
 	return data
 
 /datum/dna/deserialize(data)
@@ -434,10 +478,22 @@ var/global/list/bad_blocks[0]
 	UI = data["UI"]
 	UpdateUI()
 	UpdateSE()
-	species = data["species"]
-	b_type = data["b_type"]
+	var/datum/species/S = data["species"]
+	species = new S
+	blood_type = data["blood_type"]
 	real_name = data["real_name"]
+	flavor_text = data["flavor_text"]
 
-// a nice hook for if/when we refactor species on dna
-/datum/dna/proc/get_species_name()
-	return species
+/datum/dna/proc/transfer_identity(mob/living/carbon/human/destination)
+	if(!istype(destination))
+		return
+
+	// We manually set the species to ensure all proper species change procs are called.
+	destination.set_species(species.type, retain_damage = TRUE, keep_missing_bodyparts = TRUE)
+	var/datum/dna/new_dna = Clone()
+	new_dna.species = destination.dna.species
+	destination.dna = new_dna
+	destination.dna.species.handle_dna(destination) // Handle DNA has to be re-called as the DNA was changed.
+
+	destination.UpdateAppearance()
+	domutcheck(destination, MUTCHK_FORCED)

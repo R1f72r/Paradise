@@ -1,86 +1,43 @@
-#define TORNADO_COMBO "HHD"
-#define THROWBACK_COMBO "DHD"
-#define PLASMA_COMBO "HDDDH"
-
 /datum/martial_art/plasma_fist
 	name = "Plasma Fist"
-	help_verb = /mob/living/carbon/human/proc/plasma_fist_help
+	weight = 6
+	combos = list(/datum/martial_combo/plasma_fist/tornado_sweep, /datum/martial_combo/plasma_fist/throwback, /datum/martial_combo/plasma_fist/plasma_fist)
+	has_explaination_verb = TRUE
 
-
-/datum/martial_art/plasma_fist/proc/check_streak(var/mob/living/carbon/human/A, var/mob/living/carbon/human/D)
-	if(findtext(streak,TORNADO_COMBO))
-		streak = ""
-		Tornado(A,D)
-		return 1
-	if(findtext(streak,THROWBACK_COMBO))
-		streak = ""
-		Throwback(A,D)
-		return 1
-	if(findtext(streak,PLASMA_COMBO))
-		streak = ""
-		Plasma(A,D)
-		return 1
-	return 0
-
-/datum/martial_art/plasma_fist/proc/Tornado(var/mob/living/carbon/human/A, var/mob/living/carbon/human/D)
-	A.say("TORNADO SWEEP!")
-	spawn(0)
-		for(var/i in list(NORTH,SOUTH,EAST,WEST,EAST,SOUTH,NORTH,SOUTH,EAST,WEST,EAST,SOUTH))
-			A.dir = i
-			playsound(A.loc, 'sound/weapons/punch1.ogg', 15, 1, -1)
-			sleep(1)
-	var/obj/effect/proc_holder/spell/aoe_turf/repulse/R = new(null)
-	var/list/turfs = list()
-	for(var/turf/T in range(1,A))
-		turfs.Add(T)
-	R.cast(turfs)
-	return
-
-/datum/martial_art/plasma_fist/proc/Throwback(var/mob/living/carbon/human/A, var/mob/living/carbon/human/D)
-	D.visible_message("<span class='danger'>[A] has hit [D] with Plasma Punch!</span>", \
-								"<span class='userdanger'>[A] has hit [D] with Plasma Punch!</span>")
-	playsound(D.loc, 'sound/weapons/punch1.ogg', 50, 1, -1)
-	var/atom/throw_target = get_edge_target_turf(D, get_dir(D, get_step_away(D, A)))
-	D.throw_at(throw_target, 200, 4,A)
-	A.say("HYAH!")
-	return
-
-/datum/martial_art/plasma_fist/proc/Plasma(var/mob/living/carbon/human/A, var/mob/living/carbon/human/D)
-	A.do_attack_animation(D)
-	playsound(D.loc, 'sound/weapons/punch1.ogg', 50, 1, -1)
-	A.say("PLASMA FIST!")
-	D.visible_message("<span class='danger'>[A] has hit [D] with THE PLASMA FIST TECHNIQUE!</span>", \
-								"<span class='userdanger'>[A] has hit [D] with THE PLASMA FIST TECHNIQUE!</span>")
-	D.gib()
-	return
-
-/datum/martial_art/plasma_fist/harm_act(var/mob/living/carbon/human/A, var/mob/living/carbon/human/D)
-	add_to_streak("H",D)
-	if(check_streak(A,D))
-		return 1
+/datum/martial_art/plasma_fist/harm_act(mob/living/carbon/human/A, mob/living/carbon/human/D)
+	MARTIAL_ARTS_ACT_CHECK
 	basic_hit(A,D)
-	return 1
+	return TRUE
 
-/datum/martial_art/plasma_fist/disarm_act(var/mob/living/carbon/human/A, var/mob/living/carbon/human/D)
-	add_to_streak("D",D)
-	if(check_streak(A,D))
-		return 1
+/datum/martial_art/plasma_fist/disarm_act(mob/living/carbon/human/A, mob/living/carbon/human/D)
+	MARTIAL_ARTS_ACT_CHECK
 	basic_hit(A,D)
-	return 1
+	return TRUE
 
-/datum/martial_art/plasma_fist/grab_act(var/mob/living/carbon/human/A, var/mob/living/carbon/human/D)
-	add_to_streak("G",D)
-	if(check_streak(A,D))
-		return 1
+/datum/martial_art/plasma_fist/grab_act(mob/living/carbon/human/A, mob/living/carbon/human/D)
+	MARTIAL_ARTS_ACT_CHECK
 	basic_hit(A,D)
-	return 1
+	return TRUE
 
-/mob/living/carbon/human/proc/plasma_fist_help()
-	set name = "Recall Teachings"
-	set desc = "Remember the martial techniques of the Plasma Fist."
-	set category = "Plasma Fist"
+/datum/martial_art/plasma_fist/explaination_header(user)
+	to_chat(user, "<b><i>You clench your fists and have a flashback of knowledge...</i></b>")
 
-	to_chat(usr, "<b><i>You clench your fists and have a flashback of knowledge...</i></b>")
-	to_chat(usr, "<span class='notice'>Tornado Sweep</span>: Harm Harm Disarm. Repulses target and everyone back.")
-	to_chat(usr, "<span class='notice'>Throwback</span>: Disarm Harm Disarm. Throws the target and an item at them.")
-	to_chat(usr, "<span class='notice'>The Plasma Fist</span>: Harm Disarm Disarm Disarm Harm. Knocks the brain out of the opponent and gibs their body.")
+/obj/item/plasma_fist_scroll
+	name = "frayed scroll"
+	desc = "An aged and frayed scrap of paper written in shifting runes. There are hand-drawn illustrations of pugilism."
+	icon = 'icons/obj/wizard.dmi'
+	icon_state ="scroll2"
+	new_attack_chain = TRUE
+
+/obj/item/plasma_fist_scroll/activate_self(mob/living/carbon/human/user)
+	if(!ishuman(user))
+		return ..()
+
+	var/datum/martial_art/plasma_fist/F = new/datum/martial_art/plasma_fist(null)
+	F.teach(user)
+	to_chat(user, SPAN_BOLDANNOUNCEIC("You have learned the ancient martial art of Plasma Fist."))
+	user.drop_item_to_ground(src, TRUE)
+	visible_message(SPAN_WARNING("[src] crumbles to dust!"))
+	new /obj/effect/decal/cleanable/ash(get_turf(src))
+	qdel(src)
+	return ITEM_INTERACT_COMPLETE

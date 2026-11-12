@@ -1,16 +1,12 @@
 
-/obj/structure/closet/malf/suits
+/obj/structure/closet/malf_suits
 	desc = "It's a storage unit for operational gear."
 	icon_state = "syndicate"
-	icon_closed = "syndicate"
-	icon_opened = "syndicateopen"
 
-/obj/structure/closet/malf/suits/New()
-	..()
-	new /obj/item/weapon/tank/jetpack/void(src)
+/obj/structure/closet/malf_suits/populate_contents()
+	new /obj/item/tank/jetpack/void(src)
 	new /obj/item/clothing/mask/breath(src)
-	new /obj/item/clothing/head/helmet/space/nasavoid(src)
-	new /obj/item/clothing/suit/space/nasavoid(src)
-	new /obj/item/weapon/crowbar(src)
-	new /obj/item/weapon/stock_parts/cell(src)
-	new /obj/item/device/multitool(src)
+	new /obj/effect/voidsuitspawner(src)
+	new /obj/item/crowbar(src)
+	new /obj/item/stock_parts/cell(src)
+	new /obj/item/multitool(src)
